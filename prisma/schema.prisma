@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ApplicationStatus {
+  Draft
+  Applied
+  Interviewing
+  Rejected
+  Offer
+}
+
+model User {
+  id           String        @id @default(cuid())
+  name         String
+  email        String        @unique
+  passwordHash String        @map("password_hash")
+  createdAt    DateTime      @default(now()) @map("created_at")
+  updatedAt    DateTime      @updatedAt @map("updated_at")
+  masterCv     MasterCV?
+  applications Application[]
+  aiUsage      AIUsage[]
+  aiErrorLogs  AIErrorLog[]
+
+  @@map("users")
+}
+
+model MasterCV {
+  id        String   @id @default(cuid())
+  userId    String   @unique @map("user_id")
+  content   Json
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("master_cvs")
+}
+
+model Application {
+  id                     String            @id @default(cuid())
+  userId                 String            @map("user_id")
+  companyName            String?           @map("company_name")
+  positionTitle          String?           @map("position_title")
+  location               String?
+  originalJobDescription String            @map("original_job_description")
+  parsedMetadata         Json              @map("parsed_metadata")
+  optimizedCvJson        Json              @map("optimized_cv_json")
+  coverLetterText        String            @map("cover_letter_text")
+  atsScore               Float             @map("ats_score")
+  status                 ApplicationStatus @default(Draft)
+  createdAt              DateTime          @default(now()) @map("created_at")
+  user                   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiUsage                AIUsage[]
+  aiErrorLogs            AIErrorLog[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@map("applications")
+}
+
+model AIUsage {
+  id            String      @id @default(cuid())
+  userId        String      @map("user_id")
+  applicationId String?     @map("application_id")
+  model         String
+  inputTokens   Int         @default(0) @map("input_tokens")
+  outputTokens  Int         @default(0) @map("output_tokens")
+  estimatedCost Decimal     @default(0) @map("estimated_cost") @db.Decimal(10, 6)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  user          User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("ai_usage")
+}
+
+model AIErrorLog {
+  id            String       @id @default(cuid())
+  userId        String       @map("user_id")
+  applicationId String?      @map("application_id")
+  model         String
+  errorMessage  String       @map("error_message")
+  retryCount    Int          @default(0) @map("retry_count")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  user          User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  application   Application? @relation(fields: [applicationId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@map("ai_error_logs")
+}

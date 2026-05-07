@@ -2,7 +2,9 @@ name: rolevector
 services:
   appserver:
     type: node:20
-    command: npm run dev -- --hostname 0.0.0.0
+    port: 3000
+    ssl: true
+    command: npm run dev
     build:
       - npm install
     build_as_root:
@@ -11,21 +13,35 @@ services:
     overrides:
       environment:
         NODE_ENV: development
-        DATABASE_URL: postgresql://rolevector:rolevector@database:5432/rolevector
+        APP_URL: https://rolevector.lndo.site/
+        DATABASE_URL: postgresql://postgres@database:5432/rolevector
         NEXTAUTH_URL: https://rolevector.lndo.site
         NEXTAUTH_SECRET: rolevector-local-development-secret
         NEXT_TELEMETRY_DISABLED: "1"
+        NEXT_PUBLIC_APP_URL: https://rolevector.lndo.site/
+        OPENAI_API_KEY:
         OPENAI_MODEL: gpt-5
         PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
         PUPPETEER_SKIP_DOWNLOAD: "true"
   database:
     type: postgres:16
-    portforward: true
     creds:
       user: rolevector
       password: rolevector
       database: rolevector
 tooling:
+  dev:
+    service: appserver
+    cmd: npm run dev
+  build:
+    service: appserver
+    cmd: npm run build
+  lint:
+    service: appserver
+    cmd: npm run lint
+  typecheck:
+    service: appserver
+    cmd: npx tsc --noEmit
   npm:
     service: appserver
   npx:
@@ -35,12 +51,18 @@ tooling:
   prisma:
     service: appserver
     cmd: npx prisma
+  migrate:
+    service: appserver
+    cmd: npx prisma migrate dev
+  seed:
+    service: appserver
+    cmd: npx prisma db seed
   next:
     service: appserver
     cmd: npx next
   psql:
     service: database
-    cmd: psql -h database -U rolevector -d rolevector
+    cmd: psql -h database -U postgres -d rolevector
 proxy:
   appserver:
     - rolevector.lndo.site:3000

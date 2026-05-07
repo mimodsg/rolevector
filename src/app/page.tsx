@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const workflow = [
   "Build a truthful master CV",
   "Paste a job description",
@@ -23,12 +25,12 @@ export default function Home() {
                 tailored applications, and preserving each generated snapshot.
               </p>
             </div>
-            <a
+            <Link
               className="inline-flex w-fit items-center justify-center rounded-md bg-[#1f6f5b] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#185847]"
-              href="#job-description"
+              href="/dashboard"
             >
-              Start optimization
-            </a>
+              Open workspace
+            </Link>
           </div>
         </header>
 
@@ -46,10 +48,7 @@ export default function Home() {
           ))}
         </div>
 
-        <section
-          className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]"
-          id="job-description"
-        >
+        <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
           <form className="rounded-md border border-[#d9deea] bg-white p-5 shadow-sm">
             <label
               className="text-sm font-semibold text-[#24324a]"
