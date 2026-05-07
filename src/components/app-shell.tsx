@@ -1,5 +1,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
+import { ButtonLink } from "@/components/ui/button";
+import { Eyebrow, PageTitle } from "@/components/ui/typography";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard" },
@@ -18,16 +20,16 @@ export function AppShell({
   actions?: ReactNode;
 }) {
   return (
-    <main className="min-h-screen bg-[#f5f7fb] text-[#172033]">
-      <header className="border-b border-[#d9deea] bg-white">
+    <main className="min-h-screen text-rv-text">
+      <header className="border-b border-rv-border bg-rv-surface/80 backdrop-blur">
         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-4 md:flex-row md:items-center md:justify-between">
-          <Link className="text-lg font-semibold" href="/dashboard">
+          <Link className="font-title text-2xl font-medium uppercase text-rv-highlight" href="/dashboard">
             RoleVector
           </Link>
           <nav className="flex flex-wrap gap-2">
             {navItems.map((item) => (
               <Link
-                className="rounded-md px-3 py-2 text-sm font-medium text-[#4d5b6f] hover:bg-[#eef2f7] hover:text-[#172033]"
+                className="rounded-rvmd px-3 py-2 text-sm font-bold text-rv-text-muted hover:bg-rv-primary-soft hover:text-rv-text"
                 href={item.href}
                 key={item.href}
               >
@@ -39,8 +41,15 @@ export function AppShell({
       </header>
       <section className="mx-auto flex max-w-7xl flex-col gap-6 px-6 py-8">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <h1 className="text-3xl font-semibold">{title}</h1>
-          {actions}
+          <div>
+            <Eyebrow>Workspace</Eyebrow>
+            <PageTitle className="mt-3">{title}</PageTitle>
+          </div>
+          {actions ?? (
+            <ButtonLink href="/optimize" variant="ghost">
+              Optimize
+            </ButtonLink>
+          )}
         </div>
         {children}
       </section>
