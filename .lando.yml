@@ -35,7 +35,7 @@ tooling:
     cmd: npm run dev
   build:
     service: appserver
-    cmd: npm run build
+    cmd: NODE_ENV=production npm run build
   lint:
     service: appserver
     cmd: npm run lint

@@ -1,12 +1,13 @@
 import { AppShell } from "@/components/app-shell";
 import { StatusPill } from "@/components/status-pill";
+import { Panel } from "@/components/ui/panel";
 
 export default function ApplicationsPage() {
   return (
     <AppShell title="Applications">
-      <section className="overflow-hidden rounded-md border border-[#d9deea] bg-white shadow-sm">
+      <Panel className="overflow-hidden p-0">
         <table className="w-full border-collapse text-left text-sm">
-          <thead className="bg-[#eef2f7] text-[#4d5b6f]">
+          <thead className="bg-rv-bg text-rv-text-muted">
             <tr>
               <th className="px-4 py-3 font-semibold">Company</th>
               <th className="px-4 py-3 font-semibold">Position</th>
@@ -17,7 +18,7 @@ export default function ApplicationsPage() {
           </thead>
           <tbody>
             <tr>
-              <td className="px-4 py-5 text-[#4d5b6f]" colSpan={5}>
+              <td className="px-4 py-5 text-rv-text-muted" colSpan={5}>
                 No generated applications yet.
               </td>
             </tr>
@@ -32,7 +33,7 @@ export default function ApplicationsPage() {
             </tr>
           </tbody>
         </table>
-      </section>
+      </Panel>
     </AppShell>
   );
 }
