@@ -1,0 +1,46 @@
+name: rolevector
+services:
+  appserver:
+    type: node:20
+    command: npm run dev -- --hostname 0.0.0.0
+    build:
+      - npm install
+    build_as_root:
+      - apt-get update -y
+      - apt-get install -y chromium fonts-liberation
+    overrides:
+      environment:
+        NODE_ENV: development
+        DATABASE_URL: postgresql://rolevector:rolevector@database:5432/rolevector
+        NEXTAUTH_URL: https://rolevector.lndo.site
+        NEXTAUTH_SECRET: rolevector-local-development-secret
+        NEXT_TELEMETRY_DISABLED: "1"
+        OPENAI_MODEL: gpt-5
+        PUPPETEER_EXECUTABLE_PATH: /usr/bin/chromium
+        PUPPETEER_SKIP_DOWNLOAD: "true"
+  database:
+    type: postgres:16
+    portforward: true
+    creds:
+      user: rolevector
+      password: rolevector
+      database: rolevector
+tooling:
+  npm:
+    service: appserver
+  npx:
+    service: appserver
+  node:
+    service: appserver
+  prisma:
+    service: appserver
+    cmd: npx prisma
+  next:
+    service: appserver
+    cmd: npx next
+  psql:
+    service: database
+    cmd: psql -h database -U rolevector -d rolevector
+proxy:
+  appserver:
+    - rolevector.lndo.site:3000
