@@ -1,16 +1,27 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createApplicationSchema } from "@/lib/schemas/application";
-import { masterCvSchema } from "@/lib/schemas/master-cv";
 import { parseJobDescription } from "@/lib/services/job-parser";
 import { optimizeApplication } from "@/lib/services/ai-optimizer";
+import { masterCvRecordToMasterCv } from "@/lib/master-cv";
 import { requireCurrentUserId } from "@/lib/server/session";
 
 export async function POST(request: Request) {
   const userId = await requireCurrentUserId();
   const { jobDescription } = createApplicationSchema.parse(await request.json());
   const masterCvRecord = await prisma.masterCV.findUnique({
-    where: { userId }
+    where: { userId },
+    include: {
+      workExperiences: {
+        orderBy: { sortOrder: "asc" }
+      },
+      projects: {
+        orderBy: { sortOrder: "asc" }
+      },
+      educationEntries: {
+        orderBy: { sortOrder: "asc" }
+      }
+    }
   });
 
   if (!masterCvRecord) {
@@ -20,7 +31,7 @@ export async function POST(request: Request) {
     );
   }
 
-  const masterCv = masterCvSchema.parse(masterCvRecord.content);
+  const masterCv = masterCvRecordToMasterCv(masterCvRecord);
   const parsedJob = parseJobDescription(jobDescription);
   const optimized = await optimizeApplication({ masterCv, parsedJob });
 
