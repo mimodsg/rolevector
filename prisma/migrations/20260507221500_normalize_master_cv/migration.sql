@@ -62,9 +62,13 @@ ADD COLUMN "hidden_keywords" TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
 -- Backfill scalar and array columns from the existing JSON payload.
 UPDATE "master_cvs" AS mc
 SET
-  "full_name" = COALESCE(mc."content"->'basics'->>'full_name', ''),
+  "full_name" = COALESCE(
+    NULLIF(BTRIM(mc."content"->'basics'->>'full_name'), ''),
+    NULLIF(BTRIM(u."name"), ''),
+    SPLIT_PART(u."email", '@', 1)
+  ),
   "title" = COALESCE(mc."content"->'basics'->>'title', ''),
-  "email" = COALESCE(mc."content"->'basics'->>'email', ''),
+  "email" = u."email",
   "phone" = COALESCE(mc."content"->'basics'->>'phone', ''),
   "location" = COALESCE(mc."content"->'basics'->>'location', ''),
   "linkedin" = COALESCE(mc."content"->'basics'->>'linkedin', ''),
@@ -72,58 +76,78 @@ SET
   "summary" = COALESCE(mc."content"->>'summary', ''),
   "core_skills" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'core_skills', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'core_skills', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   ),
   "technical_languages" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'technical_skills'->'languages', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'technical_skills'->'languages', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   ),
   "technical_frameworks" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'technical_skills'->'frameworks', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'technical_skills'->'frameworks', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   ),
   "technical_cms" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'technical_skills'->'cms', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'technical_skills'->'cms', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   ),
   "technical_tools" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'technical_skills'->'tools', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'technical_skills'->'tools', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   ),
   "certifications" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'certifications', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'certifications', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   ),
   "languages" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'languages', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'languages', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   ),
   "hidden_additional_experience" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'hidden_context'->'additional_experience', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'hidden_context'->'additional_experience', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   ),
   "hidden_keywords" = COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(mc."content"->'hidden_context'->'keywords', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(mc."content"->'hidden_context'->'keywords', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
-  );
+  )
+FROM "users" AS u
+WHERE u."id" = mc."user_id";
 
 -- Backfill nested rows from the existing JSON payload.
 INSERT INTO "master_cv_work_experiences" (
@@ -143,21 +167,29 @@ SELECT
   md5(random()::text || clock_timestamp()::text),
   mc."id",
   item.ord - 1,
-  COALESCE(item.value->>'company', ''),
-  COALESCE(item.value->>'title', ''),
+  NULLIF(BTRIM(item.value->>'company'), ''),
+  NULLIF(BTRIM(item.value->>'title'), ''),
   COALESCE(item.value->>'location', ''),
   COALESCE(item.value->>'start_date', ''),
   COALESCE(item.value->>'end_date', ''),
-  COALESCE((item.value->>'current')::boolean, false),
+  CASE
+    WHEN LOWER(BTRIM(COALESCE(item.value->>'current', ''))) IN ('true', 't', '1', 'yes', 'y') THEN true
+    WHEN LOWER(BTRIM(COALESCE(item.value->>'current', ''))) IN ('false', 'f', '0', 'no', 'n') THEN false
+    ELSE false
+  END,
   COALESCE(item.value->>'description', ''),
   COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(item.value->'achievements', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(item.value->'achievements', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   )
 FROM "master_cvs" AS mc
-CROSS JOIN LATERAL jsonb_array_elements(COALESCE(mc."content"->'work_experience', '[]'::jsonb)) WITH ORDINALITY AS item(value, ord);
+CROSS JOIN LATERAL jsonb_array_elements(COALESCE(mc."content"->'work_experience', '[]'::jsonb)) WITH ORDINALITY AS item(value, ord)
+WHERE NULLIF(BTRIM(item.value->>'company'), '') IS NOT NULL
+  AND NULLIF(BTRIM(item.value->>'title'), '') IS NOT NULL;
 
 INSERT INTO "master_cv_projects" (
   "id",
@@ -171,16 +203,19 @@ SELECT
   md5(random()::text || clock_timestamp()::text),
   mc."id",
   item.ord - 1,
-  COALESCE(item.value->>'title', ''),
+  NULLIF(BTRIM(item.value->>'title'), ''),
   COALESCE(item.value->>'description', ''),
   COALESCE(
     ARRAY(
-      SELECT jsonb_array_elements_text(COALESCE(item.value->'technologies', '[]'::jsonb))
+      SELECT value
+      FROM jsonb_array_elements_text(COALESCE(item.value->'technologies', '[]'::jsonb)) AS value
+      WHERE NULLIF(BTRIM(value), '') IS NOT NULL
     ),
     ARRAY[]::TEXT[]
   )
 FROM "master_cvs" AS mc
-CROSS JOIN LATERAL jsonb_array_elements(COALESCE(mc."content"->'projects', '[]'::jsonb)) WITH ORDINALITY AS item(value, ord);
+CROSS JOIN LATERAL jsonb_array_elements(COALESCE(mc."content"->'projects', '[]'::jsonb)) WITH ORDINALITY AS item(value, ord)
+WHERE NULLIF(BTRIM(item.value->>'title'), '') IS NOT NULL;
 
 INSERT INTO "master_cv_education" (
   "id",
@@ -195,12 +230,13 @@ SELECT
   md5(random()::text || clock_timestamp()::text),
   mc."id",
   item.ord - 1,
-  COALESCE(item.value->>'institution', ''),
+  NULLIF(BTRIM(item.value->>'institution'), ''),
   COALESCE(item.value->>'degree', ''),
   COALESCE(item.value->>'start_date', ''),
   COALESCE(item.value->>'end_date', '')
 FROM "master_cvs" AS mc
-CROSS JOIN LATERAL jsonb_array_elements(COALESCE(mc."content"->'education', '[]'::jsonb)) WITH ORDINALITY AS item(value, ord);
+CROSS JOIN LATERAL jsonb_array_elements(COALESCE(mc."content"->'education', '[]'::jsonb)) WITH ORDINALITY AS item(value, ord)
+WHERE NULLIF(BTRIM(item.value->>'institution'), '') IS NOT NULL;
 
 -- Remove the JSON payload once it has been normalized.
 ALTER TABLE "master_cvs" DROP COLUMN "content";
