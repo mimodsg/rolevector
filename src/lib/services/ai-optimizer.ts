@@ -1,5 +1,6 @@
 import type { MasterCv } from "@/lib/schemas/master-cv";
 import type { ParsedJob } from "@/lib/schemas/job";
+import { renderCoverLetterTemplate } from "@/lib/cover-letter-template";
 import { env } from "@/lib/env";
 import { scoreAtsCompatibility } from "./ats-scoring";
 
@@ -15,9 +16,11 @@ export type OptimizationResult = {
 };
 
 export async function optimizeApplication({
+  coverLetterTemplate,
   masterCv,
   parsedJob
 }: {
+  coverLetterTemplate?: string;
   masterCv: MasterCv;
   parsedJob: ParsedJob;
 }): Promise<OptimizationResult> {
@@ -39,19 +42,26 @@ export async function optimizeApplication({
 
   const role = parsedJob.position_title ?? "the role";
   const company = parsedJob.company_name ?? "your team";
+  const coverLetterText = coverLetterTemplate?.trim()
+    ? renderCoverLetterTemplate({
+        masterCv: optimizedCvJson,
+        parsedJob,
+        template: coverLetterTemplate
+      })
+    : [
+        "Dear hiring team,",
+        "",
+        `I am excited to apply for ${role} at ${company}. My background aligns with the requirements you described, especially around ${optimizedCvJson.hard_skills.slice(0, 4).join(", ") || "the requested experience"}.`,
+        "",
+        "I would welcome the opportunity to discuss how my experience can support your hiring goals.",
+        "",
+        "Sincerely,",
+        optimizedCvJson.basics.full_name
+      ].join("\n");
 
   return {
     optimizedCvJson,
-    coverLetterText: [
-      "Dear hiring team,",
-      "",
-      `I am excited to apply for ${role} at ${company}. My background aligns with the requirements you described, especially around ${optimizedCvJson.hard_skills.slice(0, 4).join(", ") || "the requested experience"}.`,
-      "",
-      "I would welcome the opportunity to discuss how my experience can support your hiring goals.",
-      "",
-      "Sincerely,",
-      optimizedCvJson.basics.full_name
-    ].join("\n"),
+    coverLetterText,
     atsScore: score.overall,
     metadata: {
       model: env.OPENAI_MODEL,

@@ -53,6 +53,21 @@ const demoMasterCv = {
 const demoJobDescription =
   "We are hiring a Full Stack Developer with Next.js, TypeScript, Node.js, PostgreSQL, and API development experience.";
 
+const demoCoverLetterTemplate = `Dear [Company] Team,
+
+I am writing to apply for the Full Stack Developer position. I am a seasoned engineer with experience building scalable web applications, with a strong focus on frontend architecture, component-driven development, and system integrations.
+
+I have had the opportunity to contribute to a range of high-impact projects, including:
+
+[Projects]
+
+These experiences have strengthened my ability to deliver robust, scalable solutions while collaborating effectively across multidisciplinary teams.
+
+Thank you for your time and consideration. I look forward to the opportunity to speak with you.
+
+Regards,
+Demo User`;
+
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 12);
   const localAdminPasswordHash = await bcrypt.hash("admin", 12);
@@ -204,6 +219,17 @@ async function main() {
           endDate: item.end_date
         }))
       }
+    }
+  });
+
+  await prisma.coverLetterTemplate.upsert({
+    where: { userId: user.id },
+    update: {
+      content: demoCoverLetterTemplate
+    },
+    create: {
+      userId: user.id,
+      content: demoCoverLetterTemplate
     }
   });
 

@@ -33,7 +33,14 @@ export async function POST(request: Request) {
 
   const masterCv = masterCvRecordToMasterCv(masterCvRecord);
   const parsedJob = parseJobDescription(jobDescription);
-  const optimized = await optimizeApplication({ masterCv, parsedJob });
+  const coverLetterTemplate = await prisma.coverLetterTemplate.findUnique({
+    where: { userId }
+  });
+  const optimized = await optimizeApplication({
+    coverLetterTemplate: coverLetterTemplate?.content,
+    masterCv,
+    parsedJob
+  });
 
   const application = await prisma.application.create({
     data: {
