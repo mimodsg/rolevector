@@ -1,12 +1,12 @@
 import type { ApplicationStatusValue } from "@/lib/schemas/application";
 
 export const statusPillStyles = {
-  base: "inline-flex rounded-md px-2 py-1 text-xs font-semibold",
+  base: "inline-flex rounded-full px-2.5 py-1 text-xs font-bold",
   variants: {
-    Draft: "bg-[#eef2f7] text-[#334155]",
-    Applied: "bg-[#e0f2fe] text-[#075985]",
-    Interviewing: "bg-[#dcfce7] text-[#166534]",
-    Rejected: "bg-[#fee2e2] text-[#991b1b]",
-    Offer: "bg-[#fef3c7] text-[#92400e]"
+    Draft: "bg-rv-primary-soft text-rv-text-soft",
+    Applied: "bg-rv-highlight-soft text-rv-highlight",
+    Interviewing: "bg-rv-accent-soft text-rv-accent",
+    Rejected: "bg-rv-error-soft text-rv-error",
+    Offer: "bg-rv-highlight text-rv-bg"
   } satisfies Record<ApplicationStatusValue, string>
 };
