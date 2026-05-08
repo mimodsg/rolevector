@@ -67,7 +67,7 @@ export const masterCvSchema = z.preprocess((value) => {
       z.object({
         title: z.string().trim().min(1),
         description: z.string().trim().optional().default(""),
-        technologies: z.array(z.string().trim()).default([])
+        client: z.string().trim().optional().default("")
       })
     )
     .default([]),

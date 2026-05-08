@@ -232,7 +232,7 @@ function parseProjects(text: string) {
       return {
         title,
         description: lines.slice(1).join("\n").slice(0, 1200),
-        technologies: parseList(chunk).slice(0, 12)
+        client: ""
       };
     })
     .filter((item): item is NonNullable<typeof item> => Boolean(item))

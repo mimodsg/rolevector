@@ -71,6 +71,10 @@ function toggleListValue(items: string[], value: string) {
   return items.includes(value) ? items.filter((item) => item !== value) : [...items, value];
 }
 
+function uniqueValues(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
 function workExperienceSortValue(item: WorkExperienceItem) {
   const value = item.end_date || item.start_date;
   const parsed = Date.parse(`${value || "0000-01"}-01`);
@@ -146,6 +150,9 @@ export function MasterCvEditor({
   const [expandedExperienceIndexes, setExpandedExperienceIndexes] = useState<Set<number>>(
     () => new Set()
   );
+  const [expandedProjectIndexes, setExpandedProjectIndexes] = useState<Set<number>>(
+    () => new Set()
+  );
 
   function updateMasterCv(next: Partial<MasterCv>) {
     setMasterCv((current) => ({ ...current, ...next }));
@@ -193,6 +200,20 @@ export function MasterCvEditor({
 
     if (field === "work_experience") {
       setExpandedExperienceIndexes((current) => {
+        const next = new Set<number>();
+        current.forEach((itemIndex) => {
+          if (itemIndex < index) {
+            next.add(itemIndex);
+          } else if (itemIndex > index) {
+            next.add(itemIndex - 1);
+          }
+        });
+        return next;
+      });
+    }
+
+    if (field === "projects") {
+      setExpandedProjectIndexes((current) => {
         const next = new Set<number>();
         current.forEach((itemIndex) => {
           if (itemIndex < index) {
@@ -254,6 +275,27 @@ export function MasterCvEditor({
     });
   }
 
+  function addProject() {
+    updateMasterCv({
+      projects: [...masterCv.projects, { title: "", description: "", client: "" }]
+    });
+    setExpandedProjectIndexes(new Set());
+  }
+
+  function toggleProject(index: number) {
+    setExpandedProjectIndexes((current) => {
+      const next = new Set(current);
+
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+
+      return next;
+    });
+  }
+
   async function saveMasterCv(event: FormEvent<HTMLElement>) {
     event.preventDefault();
     setStatus(null);
@@ -269,6 +311,7 @@ export function MasterCvEditor({
       );
 
       setMasterCv(payload.masterCv);
+      setExpandedProjectIndexes(new Set());
       setStatus({ message: "Master CV saved.", tone: "success" });
     } catch (error) {
       setStatus({
@@ -292,6 +335,7 @@ export function MasterCvEditor({
       );
       setMasterCv(emptyMasterCv(userName, userEmail));
       setExpandedExperienceIndexes(new Set());
+      setExpandedProjectIndexes(new Set());
       setStatus({ message: "Master CV deleted.", tone: "warning" });
     } catch (error) {
       setStatus({
@@ -326,6 +370,7 @@ export function MasterCvEditor({
 
       setMasterCv(payload.masterCv);
       setExpandedExperienceIndexes(new Set());
+      setExpandedProjectIndexes(new Set());
       setStatus({
         message: `Imported ${payload.metadata.fileName}. Review the parsed fields, then save.`,
         tone: "success"
@@ -532,28 +577,25 @@ export function MasterCvEditor({
       </section>
 
       <section className="mt-8" id="projects">
-        <RepeaterHeader
-          actionLabel="Add project"
-          onAdd={() =>
-            updateMasterCv({
-              projects: [
-                ...masterCv.projects,
-                { title: "", description: "", technologies: [] }
-              ]
-            })
-          }
-          title="Projects"
-        />
+        <RepeaterHeader title="Projects" />
         <div className="mt-4 grid gap-4">
           {masterCv.projects.map((item, index) => (
             <ProjectCard
               index={index}
+              isExpanded={expandedProjectIndexes.has(index)}
               item={item}
               key={index}
+              clientOptions={uniqueValues(masterCv.work_experience.map((item) => item.company))}
               onChange={(next) => updateListItem<ProjectItem>("projects", index, next)}
               onRemove={() => removeListItem("projects", index)}
+              onToggle={() => toggleProject(index)}
             />
           ))}
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button onClick={addProject} type="button" variant="ghost">
+            Add project
+          </Button>
         </div>
       </section>
 
@@ -854,37 +896,73 @@ function MultiSelectField({
 }
 
 function ProjectCard({
+  clientOptions,
   index,
+  isExpanded,
   item,
   onChange,
-  onRemove
+  onRemove,
+  onToggle
 }: {
+  clientOptions: string[];
   index: number;
+  isExpanded: boolean;
   item: ProjectItem;
   onChange: (next: Partial<ProjectItem>) => void;
   onRemove: () => void;
+  onToggle: () => void;
 }) {
   return (
     <Panel className="bg-rv-bg/40">
-      <CardHeader index={index} onRemove={onRemove} title="Project" />
-      <Field className="mt-4" label="Title">
-        <TextInput
-          onChange={(event) => onChange({ title: event.currentTarget.value })}
-          required
-          value={item.title}
-        />
-      </Field>
-      <Field className="mt-4" label="Description">
-        <TextArea
-          onChange={(event) => onChange({ description: event.currentTarget.value })}
-          value={item.description}
-        />
-      </Field>
-      <ListField
-        label="Technologies"
-        onChange={(items) => onChange({ technologies: items })}
-        value={item.technologies}
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <button className="text-left" onClick={onToggle} type="button">
+          <h3 className="font-title text-lg uppercase text-rv-highlight">
+            Project {index + 1}
+          </h3>
+          <p className="mt-1 text-sm font-normal text-rv-text-muted">
+            {[item.title, item.client].filter(Boolean).join(" · ") || "Collapsed entry"}
+          </p>
+        </button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={onToggle} type="button" variant="ghost">
+            {isExpanded ? "Collapse" : "Expand"}
+          </Button>
+          <Button onClick={onRemove} type="button" variant="ghost">
+            Remove
+          </Button>
+        </div>
+      </div>
+
+      {isExpanded ? (
+        <>
+          <Field className="mt-4" label="Title">
+            <TextInput
+              onChange={(event) => onChange({ title: event.currentTarget.value })}
+              required
+              value={item.title}
+            />
+          </Field>
+          <Field className="mt-4" label="Client">
+            <Select
+              onChange={(event) => onChange({ client: event.currentTarget.value })}
+              value={item.client}
+            >
+              <option value="">Select client</option>
+              {uniqueValues([...clientOptions, item.client]).map((client) => (
+                <option key={client} value={client}>
+                  {client}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field className="mt-4" label="Description">
+            <TextArea
+              onChange={(event) => onChange({ description: event.currentTarget.value })}
+              value={item.description}
+            />
+          </Field>
+        </>
+      ) : null}
     </Panel>
   );
 }

@@ -132,7 +132,7 @@ async function main() {
           sortOrder: index,
           title: item.title,
           description: item.description,
-          technologies: item.technologies
+          client: item.client ?? ""
         }))
       },
       educationEntries: {
@@ -191,7 +191,7 @@ async function main() {
           sortOrder: index,
           title: item.title,
           description: item.description,
-          technologies: item.technologies
+          client: item.client ?? ""
         }))
       },
       educationEntries: {

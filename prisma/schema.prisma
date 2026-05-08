@@ -92,13 +92,13 @@ model MasterCVWorkExperience {
 }
 
 model MasterCVProject {
-  id           String   @id @default(cuid())
-  masterCvId   String   @map("master_cv_id")
-  sortOrder    Int      @default(0) @map("sort_order")
-  title        String
-  description  String   @default("")
-  technologies String[] @default([])
-  masterCv     MasterCV @relation(fields: [masterCvId], references: [id], onDelete: Cascade)
+  id          String   @id @default(cuid())
+  masterCvId  String   @map("master_cv_id")
+  sortOrder   Int      @default(0) @map("sort_order")
+  title       String
+  description String   @default("")
+  client      String   @default("")
+  masterCv    MasterCV @relation(fields: [masterCvId], references: [id], onDelete: Cascade)
 
   @@index([masterCvId, sortOrder])
   @@map("master_cv_projects")

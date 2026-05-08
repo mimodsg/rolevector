@@ -53,7 +53,7 @@ export function masterCvRecordToMasterCv(
     projects: record.projects.map((item) => ({
       title: item.title,
       description: item.description,
-      technologies: item.technologies
+      client: item.client
     })),
     education: record.educationEntries.map((item) => ({
       institution: item.institution,
@@ -119,7 +119,7 @@ function projectCreateItems(masterCv: MasterCv) {
     sortOrder: index,
     title: item.title,
     description: item.description,
-    technologies: item.technologies
+    client: item.client
   }));
 }
 
