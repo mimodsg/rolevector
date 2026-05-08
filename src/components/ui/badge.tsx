@@ -1,15 +1,44 @@
 import type { HTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-export function Tag({ className, ...props }: HTMLAttributes<HTMLSpanElement>) {
+type TagTone = "neutral" | "admin" | "authenticated";
+
+export function Tag({
+  className,
+  tone = "neutral",
+  ...props
+}: HTMLAttributes<HTMLSpanElement> & {
+  tone?: TagTone;
+}) {
+  const toneClass = {
+    neutral: "bg-rv-primary-soft text-rv-text-soft",
+    admin: "bg-rv-highlight-soft text-rv-highlight",
+    authenticated: "bg-rv-accent-soft text-rv-accent"
+  }[tone];
+
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full bg-rv-primary-soft px-2.5 py-1 text-xs font-bold text-rv-text-soft",
+        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold",
+        toneClass,
         className
       )}
       {...props}
     />
+  );
+}
+
+export function RoleTag({
+  role,
+  className
+}: {
+  role: "Authenticated" | "Admin";
+  className?: string;
+}) {
+  return (
+    <Tag className={className} tone={role === "Admin" ? "admin" : "authenticated"}>
+      {role === "Admin" ? "Admin" : "Authenticated"}
+    </Tag>
   );
 }
 

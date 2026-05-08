@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { getServerSession } from "next-auth";
 import type { ReactNode } from "react";
+import { authOptions } from "@/lib/auth";
 import { appShellStyles as styles } from "./styles";
 
 const navItems = [
@@ -15,7 +17,13 @@ type AppShellProps = {
   actions?: ReactNode;
 };
 
-export function AppShell({ children, title, actions }: AppShellProps) {
+export async function AppShell({ children, title, actions }: AppShellProps) {
+  const session = await getServerSession(authOptions);
+  const visibleNavItems =
+    session?.user.role === "Admin"
+      ? [...navItems, { href: "/admin/users", label: "Users" }]
+      : navItems;
+
   return (
     <main className={styles.main}>
       <header className={styles.header}>
@@ -24,7 +32,7 @@ export function AppShell({ children, title, actions }: AppShellProps) {
             RoleVector
           </Link>
           <nav className={styles.nav}>
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <Link className={styles.navLink} href={item.href} key={item.href}>
                 {item.label}
               </Link>

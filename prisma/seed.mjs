@@ -48,14 +48,33 @@ const demoJobDescription =
 
 async function main() {
   const passwordHash = await bcrypt.hash("password123", 12);
+  const localAdminPasswordHash = await bcrypt.hash("admin", 12);
+
+  await prisma.user.upsert({
+    where: { email: "admin@local.local" },
+    update: {
+      name: "Local Admin",
+      passwordHash: localAdminPasswordHash,
+      role: "Admin"
+    },
+    create: {
+      name: "Local Admin",
+      email: "admin@local.local",
+      passwordHash: localAdminPasswordHash,
+      role: "Admin"
+    }
+  });
 
   const user = await prisma.user.upsert({
     where: { email: "demo@rolevector.local" },
-    update: {},
+    update: {
+      role: "Admin"
+    },
     create: {
       name: "Demo User",
       email: "demo@rolevector.local",
-      passwordHash
+      passwordHash,
+      role: "Admin"
     }
   });
 
