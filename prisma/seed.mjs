@@ -61,10 +61,107 @@ async function main() {
 
   await prisma.masterCV.upsert({
     where: { userId: user.id },
-    update: { content: demoMasterCv },
+    update: {
+      fullName: demoMasterCv.basics.full_name,
+      title: demoMasterCv.basics.title,
+      email: demoMasterCv.basics.email,
+      phone: demoMasterCv.basics.phone,
+      location: demoMasterCv.basics.location,
+      linkedin: demoMasterCv.basics.linkedin,
+      website: demoMasterCv.basics.website,
+      summary: demoMasterCv.summary,
+      coreSkills: demoMasterCv.core_skills,
+      technicalLanguages: demoMasterCv.technical_skills.languages,
+      technicalFrameworks: demoMasterCv.technical_skills.frameworks,
+      technicalCms: demoMasterCv.technical_skills.cms,
+      technicalTools: demoMasterCv.technical_skills.tools,
+      certifications: demoMasterCv.certifications,
+      languages: demoMasterCv.languages,
+      hiddenAdditionalExperience: demoMasterCv.hidden_context.additional_experience,
+      hiddenKeywords: demoMasterCv.hidden_context.keywords,
+      workExperiences: {
+        deleteMany: {},
+        create: demoMasterCv.work_experience.map((item, index) => ({
+          sortOrder: index,
+          company: item.company,
+          title: item.title,
+          location: item.location,
+          startDate: item.start_date,
+          endDate: item.end_date,
+          current: item.current,
+          description: item.description,
+          achievements: item.achievements
+        }))
+      },
+      projects: {
+        deleteMany: {},
+        create: demoMasterCv.projects.map((item, index) => ({
+          sortOrder: index,
+          title: item.title,
+          description: item.description,
+          technologies: item.technologies
+        }))
+      },
+      educationEntries: {
+        deleteMany: {},
+        create: demoMasterCv.education.map((item, index) => ({
+          sortOrder: index,
+          institution: item.institution,
+          degree: item.degree,
+          startDate: item.start_date,
+          endDate: item.end_date
+        }))
+      }
+    },
     create: {
       userId: user.id,
-      content: demoMasterCv
+      fullName: demoMasterCv.basics.full_name,
+      title: demoMasterCv.basics.title,
+      email: demoMasterCv.basics.email,
+      phone: demoMasterCv.basics.phone,
+      location: demoMasterCv.basics.location,
+      linkedin: demoMasterCv.basics.linkedin,
+      website: demoMasterCv.basics.website,
+      summary: demoMasterCv.summary,
+      coreSkills: demoMasterCv.core_skills,
+      technicalLanguages: demoMasterCv.technical_skills.languages,
+      technicalFrameworks: demoMasterCv.technical_skills.frameworks,
+      technicalCms: demoMasterCv.technical_skills.cms,
+      technicalTools: demoMasterCv.technical_skills.tools,
+      certifications: demoMasterCv.certifications,
+      languages: demoMasterCv.languages,
+      hiddenAdditionalExperience: demoMasterCv.hidden_context.additional_experience,
+      hiddenKeywords: demoMasterCv.hidden_context.keywords,
+      workExperiences: {
+        create: demoMasterCv.work_experience.map((item, index) => ({
+          sortOrder: index,
+          company: item.company,
+          title: item.title,
+          location: item.location,
+          startDate: item.start_date,
+          endDate: item.end_date,
+          current: item.current,
+          description: item.description,
+          achievements: item.achievements
+        }))
+      },
+      projects: {
+        create: demoMasterCv.projects.map((item, index) => ({
+          sortOrder: index,
+          title: item.title,
+          description: item.description,
+          technologies: item.technologies
+        }))
+      },
+      educationEntries: {
+        create: demoMasterCv.education.map((item, index) => ({
+          sortOrder: index,
+          institution: item.institution,
+          degree: item.degree,
+          startDate: item.start_date,
+          endDate: item.end_date
+        }))
+      }
     }
   });
 
