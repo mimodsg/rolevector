@@ -26,7 +26,8 @@ export function masterCvRecordToMasterCv(
       website: record.website
     },
     summary: record.summary,
-    core_skills: record.coreSkills,
+    hard_skills: record.hardSkills,
+    soft_skills: record.softSkills,
     technical_skills: {
       languages: record.technicalLanguages,
       frameworks: record.technicalFrameworks,
@@ -37,11 +38,17 @@ export function masterCvRecordToMasterCv(
       company: item.company,
       title: item.title,
       location: item.location,
+      engagement_type: item.engagementType,
       start_date: item.startDate,
       end_date: item.endDate,
       current: item.current,
       description: item.description,
-      achievements: item.achievements
+      hard_skills: item.hardSkills,
+      soft_skills: item.softSkills,
+      programming_languages: item.programmingLanguages,
+      frameworks: item.frameworks,
+      cms: item.cms,
+      tools: item.tools
     })),
     projects: record.projects.map((item) => ({
       title: item.title,
@@ -51,6 +58,7 @@ export function masterCvRecordToMasterCv(
     education: record.educationEntries.map((item) => ({
       institution: item.institution,
       degree: item.degree,
+      location: item.location,
       start_date: item.startDate,
       end_date: item.endDate
     })),
@@ -73,7 +81,8 @@ export function masterCvToScalarData(masterCv: MasterCv) {
     linkedin: masterCv.basics.linkedin,
     website: masterCv.basics.website,
     summary: masterCv.summary,
-    coreSkills: masterCv.core_skills,
+    hardSkills: masterCv.hard_skills,
+    softSkills: masterCv.soft_skills,
     technicalLanguages: masterCv.technical_skills.languages,
     technicalFrameworks: masterCv.technical_skills.frameworks,
     technicalCms: masterCv.technical_skills.cms,
@@ -91,11 +100,17 @@ function workExperienceCreateItems(masterCv: MasterCv) {
     company: item.company,
     title: item.title,
     location: item.location,
+    engagementType: item.engagement_type,
     startDate: item.start_date,
     endDate: item.end_date,
     current: item.current,
     description: item.description,
-    achievements: item.achievements
+    hardSkills: item.hard_skills,
+    softSkills: item.soft_skills,
+    programmingLanguages: item.programming_languages,
+    frameworks: item.frameworks,
+    cms: item.cms,
+    tools: item.tools
   }));
 }
 
@@ -113,6 +128,7 @@ function educationCreateItems(masterCv: MasterCv) {
     sortOrder: index,
     institution: item.institution,
     degree: item.degree,
+    location: item.location,
     startDate: item.start_date,
     endDate: item.end_date
   }));

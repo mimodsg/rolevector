@@ -14,7 +14,8 @@ const demoMasterCv = {
     website: ""
   },
   summary: "Full stack developer with experience building web applications.",
-  core_skills: ["TypeScript", "React", "Node.js", "PostgreSQL"],
+  hard_skills: ["TypeScript", "React", "Node.js", "PostgreSQL"],
+  soft_skills: ["Communication", "Collaboration", "Ownership"],
   technical_skills: {
     languages: ["TypeScript", "JavaScript"],
     frameworks: ["Next.js", "React"],
@@ -26,11 +27,17 @@ const demoMasterCv = {
       company: "Example Studio",
       title: "Software Developer",
       location: "Remote",
+      engagement_type: "full-time",
       start_date: "2021-01",
       end_date: "",
       current: true,
       description: "Builds production web applications.",
-      achievements: ["Delivered internal tools with React and Node.js."]
+      hard_skills: ["TypeScript", "React", "Node.js", "PostgreSQL"],
+      soft_skills: ["Communication", "Collaboration"],
+      programming_languages: ["TypeScript", "JavaScript"],
+      frameworks: ["Next.js", "React"],
+      cms: [],
+      tools: ["Prisma", "PostgreSQL", "Git"]
     }
   ],
   projects: [],
@@ -89,7 +96,8 @@ async function main() {
       linkedin: demoMasterCv.basics.linkedin,
       website: demoMasterCv.basics.website,
       summary: demoMasterCv.summary,
-      coreSkills: demoMasterCv.core_skills,
+      hardSkills: demoMasterCv.hard_skills,
+      softSkills: demoMasterCv.soft_skills,
       technicalLanguages: demoMasterCv.technical_skills.languages,
       technicalFrameworks: demoMasterCv.technical_skills.frameworks,
       technicalCms: demoMasterCv.technical_skills.cms,
@@ -105,11 +113,17 @@ async function main() {
           company: item.company,
           title: item.title,
           location: item.location,
+          engagementType: item.engagement_type,
           startDate: item.start_date,
           endDate: item.end_date,
           current: item.current,
           description: item.description,
-          achievements: item.achievements
+          hardSkills: item.hard_skills,
+          softSkills: item.soft_skills,
+          programmingLanguages: item.programming_languages,
+          frameworks: item.frameworks,
+          cms: item.cms,
+          tools: item.tools
         }))
       },
       projects: {
@@ -127,6 +141,7 @@ async function main() {
           sortOrder: index,
           institution: item.institution,
           degree: item.degree,
+          location: item.location ?? "",
           startDate: item.start_date,
           endDate: item.end_date
         }))
@@ -142,7 +157,8 @@ async function main() {
       linkedin: demoMasterCv.basics.linkedin,
       website: demoMasterCv.basics.website,
       summary: demoMasterCv.summary,
-      coreSkills: demoMasterCv.core_skills,
+      hardSkills: demoMasterCv.hard_skills,
+      softSkills: demoMasterCv.soft_skills,
       technicalLanguages: demoMasterCv.technical_skills.languages,
       technicalFrameworks: demoMasterCv.technical_skills.frameworks,
       technicalCms: demoMasterCv.technical_skills.cms,
@@ -157,11 +173,17 @@ async function main() {
           company: item.company,
           title: item.title,
           location: item.location,
+          engagementType: item.engagement_type,
           startDate: item.start_date,
           endDate: item.end_date,
           current: item.current,
           description: item.description,
-          achievements: item.achievements
+          hardSkills: item.hard_skills,
+          softSkills: item.soft_skills,
+          programmingLanguages: item.programming_languages,
+          frameworks: item.frameworks,
+          cms: item.cms,
+          tools: item.tools
         }))
       },
       projects: {
@@ -177,6 +199,7 @@ async function main() {
           sortOrder: index,
           institution: item.institution,
           degree: item.degree,
+          location: item.location ?? "",
           startDate: item.start_date,
           endDate: item.end_date
         }))

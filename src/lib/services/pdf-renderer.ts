@@ -16,7 +16,14 @@ export function renderAtsHtml({
           <h3>${item.title} - ${item.company}</h3>
           <p>${item.start_date} - ${item.current ? "Present" : item.end_date}</p>
           <p>${item.description}</p>
-          <ul>${item.achievements.map((achievement) => `<li>${achievement}</li>`).join("")}</ul>
+          <p>${[
+            ...item.hard_skills,
+            ...item.soft_skills,
+            ...item.programming_languages,
+            ...item.frameworks,
+            ...item.cms,
+            ...item.tools
+          ].join(", ")}</p>
         </section>
       `
     )
@@ -43,8 +50,10 @@ export function renderAtsHtml({
         <p class="contact">${cv.basics.title} | ${cv.basics.email} | ${cv.basics.phone} | ${cv.basics.location}</p>
         <h2>Professional Summary</h2>
         <p>${cv.summary}</p>
-        <h2>Core Skills</h2>
-        <p>${cv.core_skills.join(", ")}</p>
+        <h2>Hard Skills</h2>
+        <p>${cv.hard_skills.join(", ")}</p>
+        <h2>Soft Skills</h2>
+        <p>${cv.soft_skills.join(", ")}</p>
         <h2>Technical Skills</h2>
         <p>${[
           ...cv.technical_skills.languages,

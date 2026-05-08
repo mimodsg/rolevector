@@ -15,7 +15,8 @@ export function scoreAtsCompatibility(
 ): AtsScoreBreakdown {
   const cvKeywords = new Set(
     [
-      ...masterCv.core_skills,
+      ...masterCv.hard_skills,
+      ...masterCv.soft_skills,
       ...masterCv.technical_skills.languages,
       ...masterCv.technical_skills.frameworks,
       ...masterCv.technical_skills.cms,

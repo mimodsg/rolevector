@@ -1,12 +1,14 @@
 import { AppShell } from "@/components/app-shell";
-import { Button } from "@/components/ui/button";
-import { Field, TextArea, TextInput } from "@/components/ui/field";
+import { MasterCvEditor } from "@/components/master-cv/master-cv-editor";
 import { Panel } from "@/components/ui/panel";
+import { prisma } from "@/lib/prisma";
+import { masterCvRecordToMasterCv } from "@/lib/master-cv";
+import { requireCurrentUser } from "@/lib/server/session";
 
 const sections = [
   "Basics",
   "Professional Summary",
-  "Core Skills",
+  "Skills",
   "Technical Skills",
   "Work Experience",
   "Projects",
@@ -16,7 +18,23 @@ const sections = [
   "Hidden Context"
 ];
 
-export default function MasterCvPage() {
+export default async function MasterCvPage() {
+  const user = await requireCurrentUser();
+  const masterCv = await prisma.masterCV.findUnique({
+    where: { userId: user.id },
+    include: {
+      workExperiences: {
+        orderBy: { sortOrder: "asc" }
+      },
+      projects: {
+        orderBy: { sortOrder: "asc" }
+      },
+      educationEntries: {
+        orderBy: { sortOrder: "asc" }
+      }
+    }
+  });
+
   return (
     <AppShell title="Master CV">
       <section className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
@@ -33,28 +51,11 @@ export default function MasterCvPage() {
             ))}
           </nav>
         </Panel>
-        <Panel as="form">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Full name">
-              <TextInput />
-            </Field>
-            <Field label="Professional title">
-              <TextInput />
-            </Field>
-            <Field label="Email">
-              <TextInput type="email" />
-            </Field>
-            <Field label="Location">
-              <TextInput />
-            </Field>
-          </div>
-          <Field className="mt-4" label="Summary">
-            <TextArea />
-          </Field>
-          <Button className="mt-5" type="button">
-            Save master CV
-          </Button>
-        </Panel>
+        <MasterCvEditor
+          initialMasterCv={masterCv ? masterCvRecordToMasterCv(masterCv) : null}
+          userEmail={user.email}
+          userName={user.name}
+        />
       </section>
     </AppShell>
   );

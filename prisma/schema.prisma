@@ -47,7 +47,8 @@ model MasterCV {
   linkedin                   String                   @default("")
   website                    String                   @default("")
   summary                    String                   @default("")
-  coreSkills                 String[]                 @default([]) @map("core_skills")
+  hardSkills                 String[]                 @default([]) @map("hard_skills")
+  softSkills                 String[]                 @default([]) @map("soft_skills")
   technicalLanguages         String[]                 @default([]) @map("technical_languages")
   technicalFrameworks        String[]                 @default([]) @map("technical_frameworks")
   technicalCms               String[]                 @default([]) @map("technical_cms")
@@ -67,18 +68,24 @@ model MasterCV {
 }
 
 model MasterCVWorkExperience {
-  id           String   @id @default(cuid())
-  masterCvId   String   @map("master_cv_id")
-  sortOrder    Int      @default(0) @map("sort_order")
-  company      String
-  title        String
-  location     String   @default("")
-  startDate    String   @default("") @map("start_date")
-  endDate      String   @default("") @map("end_date")
-  current      Boolean  @default(false)
-  description  String   @default("")
-  achievements String[] @default([])
-  masterCv     MasterCV @relation(fields: [masterCvId], references: [id], onDelete: Cascade)
+  id                   String   @id @default(cuid())
+  masterCvId           String   @map("master_cv_id")
+  sortOrder            Int      @default(0) @map("sort_order")
+  company              String
+  title                String
+  location             String   @default("")
+  engagementType       String   @default("") @map("engagement_type")
+  startDate            String   @default("") @map("start_date")
+  endDate              String   @default("") @map("end_date")
+  current              Boolean  @default(false)
+  description          String   @default("")
+  hardSkills           String[] @default([]) @map("hard_skills")
+  softSkills           String[] @default([]) @map("soft_skills")
+  programmingLanguages String[] @default([]) @map("programming_languages")
+  frameworks           String[] @default([])
+  cms                  String[] @default([])
+  tools                String[] @default([])
+  masterCv             MasterCV @relation(fields: [masterCvId], references: [id], onDelete: Cascade)
 
   @@index([masterCvId, sortOrder])
   @@map("master_cv_work_experiences")
@@ -103,6 +110,7 @@ model MasterCVEducation {
   sortOrder   Int      @default(0) @map("sort_order")
   institution String
   degree      String   @default("")
+  location    String   @default("")
   startDate   String   @default("") @map("start_date")
   endDate     String   @default("") @map("end_date")
   masterCv    MasterCV @relation(fields: [masterCvId], references: [id], onDelete: Cascade)
