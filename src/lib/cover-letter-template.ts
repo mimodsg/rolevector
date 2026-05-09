@@ -4,6 +4,7 @@ import type { ParsedJob } from "@/lib/schemas/job";
 export const coverLetterTokens = [
   { token: "[Company]", description: "Target company from the job description." },
   { token: "[Role]", description: "Target role from the job description." },
+  { token: "[Salary]", description: "Salary from the job opening, when provided." },
   { token: "[FullName]", description: "Master CV full name." },
   { token: "[Title]", description: "Master CV professional title." },
   { token: "[Email]", description: "Master CV email." },
@@ -39,6 +40,7 @@ export function renderCoverLetterTemplate({
   const replacements: Record<string, string> = {
     "[Company]": parsedJob.company_name ?? "your team",
     "[Role]": parsedJob.position_title ?? "the role",
+    "[Salary]": parsedJob.salary ?? "",
     "[FullName]": masterCv.basics.full_name,
     "[Title]": masterCv.basics.title,
     "[Email]": masterCv.basics.email,

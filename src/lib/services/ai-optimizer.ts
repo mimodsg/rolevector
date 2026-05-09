@@ -18,10 +18,12 @@ export type OptimizationResult = {
 export async function optimizeApplication({
   coverLetterTemplate,
   masterCv,
+  masterCvText,
   parsedJob
 }: {
   coverLetterTemplate?: string;
   masterCv: MasterCv;
+  masterCvText: string;
   parsedJob: ParsedJob;
 }): Promise<OptimizationResult> {
   const score = scoreAtsCompatibility(masterCv, parsedJob);
@@ -68,6 +70,7 @@ export async function optimizeApplication({
       mode: env.OPENAI_API_KEY ? "openai" : "mock",
       notes: [
         "Scaffold implementation preserves factual master CV data.",
+        `Master CV source serialized to ${masterCvText.length} characters before optimization.`,
         "Replace this mock optimizer with OpenAI structured output in the next phase."
       ]
     }
