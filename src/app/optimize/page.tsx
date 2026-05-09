@@ -1,10 +1,5 @@
-import { AppShell } from "@/components/app-shell";
-import { OptimizeForm } from "@/components/optimize/optimize-form";
+import { redirect } from "next/navigation";
 
 export default function OptimizePage() {
-  return (
-    <AppShell title="Optimize CV">
-      <OptimizeForm />
-    </AppShell>
-  );
+  redirect("/applications/new");
 }

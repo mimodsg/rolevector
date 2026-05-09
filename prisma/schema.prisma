@@ -141,6 +141,7 @@ model Application {
   jobDetails      String            @map("job_details")
   parsedMetadata  Json              @map("parsed_metadata")
   optimizedCvJson Json              @map("optimized_cv_json")
+  optimizedCvText String            @default("") @map("optimized_cv_text")
   coverLetterText String            @map("cover_letter_text")
   atsScore        Float             @map("ats_score")
   status          ApplicationStatus @default(Draft)
