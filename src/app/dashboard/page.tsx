@@ -15,8 +15,8 @@ export default function DashboardPage() {
   return (
     <AppShell
       actions={
-        <ButtonLink href="/optimize">
-          New optimization
+        <ButtonLink href="/applications/new">
+          New application
         </ButtonLink>
       }
       title="Dashboard"

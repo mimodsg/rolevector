@@ -258,8 +258,10 @@ async function main() {
           keywords: ["Next.js", "TypeScript", "PostgreSQL"]
         },
         optimizedCvJson: demoMasterCv,
+        optimizedCvText: "",
         coverLetterText:
           "Dear hiring team,\n\nI am excited to apply for the Full Stack Developer role. My experience with Next.js, TypeScript, Node.js, and PostgreSQL aligns closely with your requirements.\n\nSincerely,\nDemo User",
+        baselineAtsScore: 8.4,
         atsScore: 8.4
       }
     });

@@ -12,15 +12,11 @@ import { HelperText } from "@/components/ui/typography";
 type OptimizeResponse = {
   application: {
     atsScore: number;
+    baselineAtsScore: number;
     companyName: string | null;
     id: string;
     positionTitle: string | null;
     salary: string;
-  };
-  metadata: {
-    mode: "mock" | "openai";
-    model: string;
-    notes: string[];
   };
 };
 
@@ -59,7 +55,7 @@ export function OptimizeForm() {
 
     try {
       const payload = await parseResponse<OptimizeResponse>(
-        await fetch("/api/optimize", {
+        await fetch("/api/applications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ company, jobDetails, positionTitle, salary })
@@ -136,8 +132,8 @@ export function OptimizeForm() {
           score={result ? result.application.atsScore.toFixed(1) : "-"}
           summary={
             result
-              ? "Application generated and saved with an ATS-friendly CV snapshot and cover letter."
-              : "ATS score appears after generation."
+              ? "Application created with the full Master CV text. Optimize from the preview page when ready."
+              : "Baseline score appears after creating the application."
           }
         />
         <Panel>
@@ -145,8 +141,8 @@ export function OptimizeForm() {
             Generation output
           </h2>
           <div className="mt-4 flex flex-wrap gap-2">
-            <Tag>ATS Ready</Tag>
-            <Tag>Application Snapshot</Tag>
+            <Tag>Draft</Tag>
+            <Tag>Master CV Snapshot</Tag>
           </div>
           <dl className="mt-4 space-y-4 text-sm">
             <div>
@@ -170,12 +166,12 @@ export function OptimizeForm() {
             <div>
               <dt className="font-bold text-rv-text-soft">Cover letter</dt>
               <dd className="mt-1 text-rv-text-muted">
-                {result ? "Generated from your Cover Letter template." : "Generated after optimization."}
+                {result ? "Generated from your Cover Letter template." : "Generated after creation."}
               </dd>
             </div>
           </dl>
           <HelperText className="mt-4">
-            Generated results are saved to Applications with status Draft.
+            New applications start from your full Master CV text and can be optimized from preview.
           </HelperText>
         </Panel>
       </aside>

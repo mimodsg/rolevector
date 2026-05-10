@@ -132,22 +132,25 @@ model CoverLetterTemplate {
 }
 
 model Application {
-  id              String            @id @default(cuid())
-  userId          String            @map("user_id")
-  companyName     String?           @map("company_name")
-  positionTitle   String?           @map("position_title")
-  salary          String            @default("")
-  location        String?
-  jobDetails      String            @map("job_details")
-  parsedMetadata  Json              @map("parsed_metadata")
-  optimizedCvJson Json              @map("optimized_cv_json")
-  coverLetterText String            @map("cover_letter_text")
-  atsScore        Float             @map("ats_score")
-  status          ApplicationStatus @default(Draft)
-  createdAt       DateTime          @default(now()) @map("created_at")
-  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  aiUsage         AIUsage[]
-  aiErrorLogs     AIErrorLog[]
+  id               String            @id @default(cuid())
+  userId           String            @map("user_id")
+  companyName      String?           @map("company_name")
+  positionTitle    String?           @map("position_title")
+  salary           String            @default("")
+  location         String?
+  jobDetails       String            @map("job_details")
+  parsedMetadata   Json              @map("parsed_metadata")
+  optimizedCvJson  Json              @map("optimized_cv_json")
+  optimizedCvText  String            @default("") @map("optimized_cv_text")
+  coverLetterText  String            @map("cover_letter_text")
+  baselineAtsScore Float             @default(0) @map("baseline_ats_score")
+  atsScore         Float             @map("ats_score")
+  optimizedAt      DateTime?         @map("optimized_at")
+  status           ApplicationStatus @default(Draft)
+  createdAt        DateTime          @default(now()) @map("created_at")
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  aiUsage          AIUsage[]
+  aiErrorLogs      AIErrorLog[]
 
   @@index([userId, createdAt])
   @@index([status])
