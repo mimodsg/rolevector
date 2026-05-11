@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { ApplicationStatusSelect } from "@/components/applications/application-status-select";
 import { OptimizeApplicationButton } from "@/components/applications/optimize-application-button";
+import { RegenerateApplicationButton } from "@/components/applications/regenerate-application-button";
 import { ButtonLink } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
 import { ScoreCard } from "@/components/ui/score-card";
@@ -45,6 +46,7 @@ export default async function ApplicationPreviewPage({
     <AppShell
       actions={
         <div className="flex flex-wrap gap-3">
+          <RegenerateApplicationButton applicationId={application.id} />
           {isOptimized ? null : (
             <OptimizeApplicationButton applicationId={application.id} />
           )}

@@ -24,6 +24,28 @@ export function renderCvHtml(cv: MasterCv) {
       `
     )
     .join("");
+  const earlyCareer = cv.early_career.summary
+    ? `
+        <h2>Early Career</h2>
+        <section>
+          <h3>${escapeHtml(cv.early_career.date_range)}</h3>
+          <p>${escapeHtml(cv.early_career.summary)}</p>
+        </section>
+      `
+    : "";
+  const education = cv.education
+    .map((item) => {
+      const dates = [item.start_date, item.end_date].filter(Boolean).join(" - ");
+
+      return `
+        <section>
+          <h3>${escapeHtml([item.degree, item.institution].filter(Boolean).join(" - "))}</h3>
+          <p>${escapeHtml([item.location, dates].filter(Boolean).join(" | "))}</p>
+        </section>
+      `;
+    })
+    .join("");
+  const technicalSkillGroups = renderTechnicalSkillGroups(cv);
 
   return `
     <!doctype html>
@@ -45,24 +67,61 @@ export function renderCvHtml(cv: MasterCv) {
         <p class="contact">${escapeHtml(cv.basics.title)} | ${escapeHtml(cv.basics.email)} | ${escapeHtml(cv.basics.phone)} | ${escapeHtml(cv.basics.location)}</p>
         <h2>Professional Summary</h2>
         <p>${escapeHtml(cv.summary)}</p>
+        ${cv.frontend_expertise.length ? `<h2>Frontend Expertise</h2><p>${escapeHtml(cv.frontend_expertise.join(", "))}</p>` : ""}
         <h2>Hard Skills</h2>
         <p>${escapeHtml(cv.hard_skills.join(", "))}</p>
         <h2>Soft Skills</h2>
         <p>${escapeHtml(cv.soft_skills.join(", "))}</p>
         <h2>Technical Skills</h2>
-        <p>${escapeHtml(
-          [
-            ...cv.technical_skills.languages,
-            ...cv.technical_skills.frameworks,
-            ...cv.technical_skills.cms,
-            ...cv.technical_skills.tools
-          ].join(", ")
-        )}</p>
+        ${technicalSkillGroups}
         <h2>Work Experience</h2>
         ${experience}
+        ${earlyCareer}
+        ${education ? `<h2>Education</h2>${education}` : ""}
+        ${cv.certifications.length ? `<h2>Certifications</h2><p>${escapeHtml(cv.certifications.join(", "))}</p>` : ""}
+        ${cv.languages.length ? `<h2>Languages</h2><p>${escapeHtml(cv.languages.join(", "))}</p>` : ""}
       </body>
     </html>
   `;
+}
+
+function renderTechnicalSkillGroups(cv: MasterCv) {
+  const frontend = unique([
+    ...cv.frontend_expertise,
+    ...cv.technical_skills.languages.filter((item) => /javascript|typescript/i.test(item)),
+    ...cv.technical_skills.frameworks.filter((item) =>
+      /react|next|tailwind|storybook|styled|sass|scss/i.test(item)
+    )
+  ]);
+  const backend = unique(
+    [
+      ...cv.hard_skills,
+      ...cv.technical_skills.languages,
+      ...cv.technical_skills.frameworks,
+      ...cv.technical_skills.tools
+    ].filter((item) =>
+      /node|api|rest|graphql|php|\.net|c#|postgres|sql|prisma|backend/i.test(item)
+    )
+  );
+  const tooling = unique(
+    cv.technical_skills.tools.filter(
+      (item) => !backend.some((backendItem) => backendItem === item)
+    )
+  );
+  const groups: Array<[string, string[]]> = [
+    ["Frontend", frontend],
+    ["Backend", backend],
+    ["CMS / Platforms", cv.technical_skills.cms],
+    ["Tooling", tooling]
+  ];
+
+  return groups
+    .filter((group) => group[1].length > 0)
+    .map(
+      ([label, items]) =>
+        `<p><strong>${escapeHtml(label)}:</strong> ${escapeHtml(items.join(", "))}</p>`
+    )
+    .join("");
 }
 
 export function renderCoverLetterHtml(coverLetter: string) {
@@ -125,4 +184,8 @@ function escapeHtml(value: string) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#039;");
+}
+
+function unique(items: string[]) {
+  return [...new Set(items.filter(Boolean))];
 }

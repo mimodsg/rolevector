@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { masterCvRecordToMasterCv } from "@/lib/master-cv";
 import { masterCvToOptimizationText } from "@/lib/master-cv-text";
 import { prisma } from "@/lib/prisma";
 import { parsedJobSchema } from "@/lib/schemas/job";
-import { masterCvSchema } from "@/lib/schemas/master-cv";
 import { assertSameOrigin } from "@/lib/server/request";
 import { requireCurrentUserId } from "@/lib/server/session";
+import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
 import { optimizeApplication } from "@/lib/services/ai-optimizer";
 
 function apiError(error: unknown) {
@@ -37,7 +38,7 @@ async function logOptimizationError({
         applicationId,
         errorMessage:
           error instanceof Error ? error.message : "Unknown optimization error.",
-        model: "optimization",
+        model: process.env.OPENAI_MODEL ?? "optimization",
         userId
       }
     });
@@ -73,16 +74,39 @@ export async function POST(
       );
     }
 
-    const applicationCv = masterCvSchema.parse(application.optimizedCvJson);
+    const masterCvRecord = await prisma.masterCV.findUnique({
+      where: { userId },
+      include: {
+        educationEntries: {
+          orderBy: { sortOrder: "asc" }
+        },
+        projects: {
+          orderBy: { sortOrder: "asc" }
+        },
+        workExperiences: {
+          orderBy: { sortOrder: "asc" }
+        }
+      }
+    });
+
+    if (!masterCvRecord) {
+      return NextResponse.json(
+        { error: "Create a master CV before optimizing an application." },
+        { status: 400 }
+      );
+    }
+
+    const masterCv = masterCvRecordToMasterCv(masterCvRecord);
+    const masterCvText = masterCvToOptimizationText(masterCv);
     const parsedJob = parsedJobSchema.parse(application.parsedMetadata);
+    const baselineScore = scoreAtsCompatibility(masterCv, parsedJob).overall;
     const coverLetterTemplate = await prisma.coverLetterTemplate.findUnique({
       where: { userId }
     });
     const optimized = await optimizeApplication({
       coverLetterTemplate: coverLetterTemplate?.content,
-      masterCv: applicationCv,
-      masterCvText:
-        application.optimizedCvText || masterCvToOptimizationText(applicationCv),
+      masterCv,
+      masterCvText,
       parsedJob
     });
     const optimizedCvText = masterCvToOptimizationText(optimized.optimizedCvJson);
@@ -91,6 +115,7 @@ export async function POST(
       where: { id: application.id },
       data: {
         atsScore: optimized.atsScore,
+        baselineAtsScore: baselineScore,
         coverLetterText: optimized.coverLetterText,
         optimizedAt: new Date(),
         optimizedCvJson: optimized.optimizedCvJson,
@@ -101,12 +126,19 @@ export async function POST(
       data: {
         applicationId: application.id,
         estimatedCost: 0,
-        inputTokens: 0,
+        inputTokens: optimized.metadata.inputTokens,
         model: optimized.metadata.model,
-        outputTokens: 0,
+        outputTokens: optimized.metadata.outputTokens,
         userId
       }
     });
+    if (optimized.metadata.fallbackReason) {
+      await logOptimizationError({
+        applicationId: application.id,
+        error: new Error(optimized.metadata.fallbackReason),
+        userId
+      });
+    }
 
     return NextResponse.json({
       application: updatedApplication,

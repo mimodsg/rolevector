@@ -4,20 +4,15 @@ export function masterCvToOptimizationText(masterCv: MasterCv) {
   return [
     renderBasics(masterCv),
     section("Professional Summary", masterCv.summary),
+    section("Frontend Expertise", list(masterCv.frontend_expertise)),
     section("Hard Skills", list(masterCv.hard_skills)),
     section("Soft Skills", list(masterCv.soft_skills)),
     section(
       "Technical Skills",
-      [
-        line("Programming languages", list(masterCv.technical_skills.languages)),
-        line("Frameworks", list(masterCv.technical_skills.frameworks)),
-        line("CMS", list(masterCv.technical_skills.cms)),
-        line("Tools", list(masterCv.technical_skills.tools))
-      ]
-        .filter(Boolean)
-        .join("\n")
+      renderTechnicalSkills(masterCv)
     ),
     section("Work Experience", renderWorkExperience(masterCv)),
+    section("Early Career", renderEarlyCareer(masterCv)),
     section("Key Projects", renderProjects(masterCv)),
     section("Education", renderEducation(masterCv)),
     section("Certifications", list(masterCv.certifications)),
@@ -34,6 +29,52 @@ export function masterCvToOptimizationText(masterCv: MasterCv) {
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+function renderTechnicalSkills(masterCv: MasterCv) {
+  const frontend = unique([
+    ...masterCv.frontend_expertise,
+    ...masterCv.technical_skills.languages.filter((item) =>
+      /javascript|typescript/i.test(item)
+    ),
+    ...masterCv.technical_skills.frameworks.filter((item) =>
+      /react|next|tailwind|storybook|styled|sass|scss/i.test(item)
+    )
+  ]);
+  const backend = unique(
+    [
+      ...masterCv.hard_skills,
+      ...masterCv.technical_skills.languages,
+      ...masterCv.technical_skills.frameworks,
+      ...masterCv.technical_skills.tools
+    ].filter((item) =>
+      /node|api|rest|graphql|php|\.net|c#|postgres|sql|prisma|backend/i.test(item)
+    )
+  );
+  const cms = masterCv.technical_skills.cms;
+  const tooling = unique(
+    masterCv.technical_skills.tools.filter(
+      (item) => !backend.some((backendItem) => backendItem === item)
+    )
+  );
+
+  return [
+    line("Frontend", list(frontend)),
+    line("Backend", list(backend)),
+    line("CMS / Platforms", list(cms)),
+    line("Tooling", list(tooling))
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+function renderEarlyCareer(masterCv: MasterCv) {
+  return [
+    masterCv.early_career.date_range,
+    masterCv.early_career.summary
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function renderBasics(masterCv: MasterCv) {
@@ -112,4 +153,8 @@ function line(label: string, value: string) {
 
 function list(items: string[]) {
   return items.filter(Boolean).join(", ");
+}
+
+function unique(items: string[]) {
+  return [...new Set(items.filter(Boolean))];
 }

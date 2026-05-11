@@ -26,6 +26,7 @@ export function masterCvRecordToMasterCv(
       website: record.website
     },
     summary: record.summary,
+    frontend_expertise: [],
     hard_skills: record.hardSkills,
     soft_skills: record.softSkills,
     technical_skills: {
@@ -50,6 +51,10 @@ export function masterCvRecordToMasterCv(
       cms: item.cms,
       tools: item.tools
     })),
+    early_career: {
+      date_range: "",
+      summary: ""
+    },
     projects: record.projects.map((item) => ({
       title: item.title,
       description: item.description,

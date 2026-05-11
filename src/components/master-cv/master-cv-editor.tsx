@@ -32,6 +32,7 @@ function emptyMasterCv(userName: string, userEmail: string): MasterCv {
       website: ""
     },
     summary: "",
+    frontend_expertise: [],
     hard_skills: [],
     soft_skills: [],
     technical_skills: {
@@ -41,6 +42,10 @@ function emptyMasterCv(userName: string, userEmail: string): MasterCv {
       tools: []
     },
     work_experience: [],
+    early_career: {
+      date_range: "",
+      summary: ""
+    },
     projects: [],
     education: [],
     certifications: [],

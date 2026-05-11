@@ -32,6 +32,7 @@ export const masterCvSchema = z.preprocess((value) => {
     website: z.string().trim().optional().default("")
   }),
   summary: z.string().trim().optional().default(""),
+  frontend_expertise: z.array(z.string().trim()).default([]),
   hard_skills: z.array(z.string().trim()).default([]),
   soft_skills: z.array(z.string().trim()).default([]),
   technical_skills: z
@@ -62,6 +63,12 @@ export const masterCvSchema = z.preprocess((value) => {
       })
     )
     .default([]),
+  early_career: z
+    .object({
+      date_range: z.string().trim().optional().default(""),
+      summary: z.string().trim().optional().default("")
+    })
+    .default({ date_range: "", summary: "" }),
   projects: z
     .array(
       z.object({
