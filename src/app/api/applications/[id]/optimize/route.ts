@@ -18,20 +18,59 @@ function apiError(error: unknown) {
   throw error;
 }
 
+async function logOptimizationError({
+  applicationId,
+  error,
+  userId
+}: {
+  applicationId?: string;
+  error: unknown;
+  userId?: string;
+}) {
+  if (!applicationId || !userId) {
+    return;
+  }
+
+  try {
+    await prisma.aIErrorLog.create({
+      data: {
+        applicationId,
+        errorMessage:
+          error instanceof Error ? error.message : "Unknown optimization error.",
+        model: "optimization",
+        userId
+      }
+    });
+  } catch {
+    // Avoid masking the original optimization failure with logging failures.
+  }
+}
+
 export async function POST(
   request: Request,
   context: { params: Promise<{ id: string }> }
 ) {
+  let applicationId: string | undefined;
+  let userId: string | undefined;
+
   try {
-    const userId = await requireCurrentUserId();
+    userId = await requireCurrentUserId();
     assertSameOrigin(request);
     const { id } = await context.params;
+    applicationId = id;
     const application = await prisma.application.findFirst({
       where: { id, userId }
     });
 
     if (!application) {
       return NextResponse.json({ error: "Application not found." }, { status: 404 });
+    }
+
+    if (application.optimizedAt) {
+      return NextResponse.json(
+        { error: "This application has already been optimized." },
+        { status: 409 }
+      );
     }
 
     const applicationCv = masterCvSchema.parse(application.optimizedCvJson);
@@ -58,12 +97,24 @@ export async function POST(
         optimizedCvText
       }
     });
+    await prisma.aIUsage.create({
+      data: {
+        applicationId: application.id,
+        estimatedCost: 0,
+        inputTokens: 0,
+        model: optimized.metadata.model,
+        outputTokens: 0,
+        userId
+      }
+    });
 
     return NextResponse.json({
       application: updatedApplication,
       metadata: optimized.metadata
     });
   } catch (error) {
+    await logOptimizationError({ applicationId, error, userId });
+
     return apiError(error);
   }
 }

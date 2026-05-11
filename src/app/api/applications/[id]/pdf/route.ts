@@ -1,8 +1,12 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { masterCvSchema } from "@/lib/schemas/master-cv";
-import { renderPdfBuffer } from "@/lib/services/pdf-renderer";
+import {
+  renderCoverLetterPdfBuffer,
+  renderCvPdfBuffer
+} from "@/lib/services/pdf-renderer";
 import { requireCurrentUserId } from "@/lib/server/session";
+import { createZip } from "@/lib/zip";
 
 export async function GET(
   _request: Request,
@@ -18,15 +22,28 @@ export async function GET(
     return NextResponse.json({ error: "Application not found." }, { status: 404 });
   }
 
-  const pdf = await renderPdfBuffer({
-    cv: masterCvSchema.parse(application.optimizedCvJson),
-    coverLetter: application.coverLetterText
-  });
+  const baseName = filenameSafe(application.positionTitle ?? "application");
+  const cv = masterCvSchema.parse(application.optimizedCvJson);
+  const cvPdf = await renderCvPdfBuffer(cv);
+  const coverLetterPdf = await renderCoverLetterPdfBuffer(application.coverLetterText);
+  const archive = createZip([
+    { data: Buffer.from(cvPdf), name: `${baseName}-cv.pdf` },
+    { data: Buffer.from(coverLetterPdf), name: `${baseName}-cover-letter.pdf` }
+  ]);
 
-  return new Response(Buffer.from(pdf), {
+  return new Response(archive, {
     headers: {
-      "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${application.positionTitle ?? "application"}.pdf"`
+      "Content-Type": "application/zip",
+      "Content-Disposition": `attachment; filename="${baseName}-documents.zip"`
     }
   });
+}
+
+function filenameSafe(value: string) {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "") || "application"
+  );
 }

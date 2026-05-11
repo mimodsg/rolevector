@@ -49,7 +49,7 @@ export default async function ApplicationPreviewPage({
             <OptimizeApplicationButton applicationId={application.id} />
           )}
           <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="highlight">
-            Download PDF
+            Download PDFs
           </ButtonLink>
         </div>
       }
@@ -104,8 +104,7 @@ export default async function ApplicationPreviewPage({
           </Panel>
 
           <Panel>
-            <h2 className="font-title text-xl uppercase text-rv-text">Cover Letter</h2>
-            <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-rv-text-muted">
+            <p className="whitespace-pre-wrap text-sm leading-6 text-rv-text-muted">
               {application.coverLetterText}
             </p>
           </Panel>

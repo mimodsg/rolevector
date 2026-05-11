@@ -76,7 +76,7 @@ export default async function ApplicationsPage() {
                         Preview
                       </ButtonLink>
                       <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="ghost">
-                        Download PDF
+                        Download PDFs
                       </ButtonLink>
                     </div>
                   </td>
