@@ -1,184 +1,199 @@
 # RoleVector
 
-RoleVector is an AI-assisted CV optimization platform focused on ATS (Applicant Tracking System) compatibility, job alignment, and application customization.
+RoleVector is an AI-assisted CV and application tracking tool focused on ATS
+compatibility, job alignment, and reusable career data.
 
-The platform helps developers and technical professionals maintain a single structured master CV while generating optimized versions tailored to specific job descriptions. It also generates supporting documents such as cover letters, evaluates ATS compatibility, and provides scoring and recommendations to improve application quality.
+The application lets a user maintain one structured Master CV, create job-specific
+applications, generate a cover letter from a reusable template, score ATS alignment,
+and optimize application documents against a job opening. It is built around
+normalized career data in PostgreSQL, not hand-edited document files.
 
-The project is designed around structured data, automation workflows, and AI-assisted analysis rather than traditional document editing.
+## Features
 
----
+- Public welcome page with register and login links
+- Credentials-based authentication with user roles
+- Admin user CRUD
+- Structured Master CV editor
+- Master CV import from `.txt` and `.pdf`
+- Normalized Master CV storage for profile, skills, work experience, projects,
+  education, certifications, languages, hidden keywords, and supporting context
+- Cover letter template editor with token replacement
+- Application creation from company, position title, salary, and job details
+- Baseline ATS score and optimized ATS score comparison
+- OpenAI-backed CV optimization with schema validation and deterministic fallback
+- Regenerate application CV from the latest Master CV without consuming AI tokens
+- Application status updates
+- Separate CV and cover letter PDF generation, delivered as a ZIP archive
+- AI usage and AI error logging
 
-# Features
+## Tech Stack
 
-- Master CV management
-- ATS optimization scoring
-- Job description analysis
-- AI-assisted CV tailoring
-- Cover letter generation
-- Structured JSON/YAML CV storage
-- PDF generation pipeline
-- Hidden keywords and supplemental experience support
-- Application-specific CV versions
-- Plain text export for ATS systems
-- Modern dark-themed interface
-- Modular architecture for future AI agents and automation workflows
+### Application
 
----
-
-# Tech Stack
-
-## Frontend
-
-- React
+- Next.js 15 App Router
+- React 19
 - TypeScript
-- Vite
 - Tailwind CSS
-- SCSS
-- Atomic Design architecture
+- NextAuth credentials provider
+- Zod validation
 
-## Backend
+### Data
 
-- Node.js
-- Express.js
+- PostgreSQL
+- Prisma ORM and migrations
+- Normalized Master CV tables
+- JSON application snapshots for generated optimized CV versions
 
-## AI / Processing
+### AI and Documents
 
-- OpenAI API
-- Prompt engineering workflows
-- ATS parsing logic
-- CV scoring engine
+- OpenAI API via the official `openai` SDK
+- Structured output parsing with Zod validation
+- Local deterministic optimizer fallback
+- Puppeteer / Chromium PDF rendering
+- `pdf-parse` for Master CV PDF imports
 
-## Data
+### Local Development
 
-- JSON
-- YAML
-
-## Tooling
-
+- Lando
+- Node 20
+- PostgreSQL 16
 - ESLint
-- Prettier
-- Docker
-- GitHub Actions
 
----
+## Project Structure
 
-# Project Structure
-
-```bash
-project-root/
-│
-├── frontend/
-├── backend/
-├── shared/
-├── prompts/
-├── templates/
-├── generated/
-├── docs/
+```text
+.
+├── prisma/
+│   ├── migrations/          # Database migrations
+│   ├── schema.prisma        # Prisma schema
+│   └── seed.mjs             # Local seed data and demo users
+├── src/
+│   ├── app/                 # Next.js routes, pages, and API handlers
+│   ├── components/          # UI, feature, and layout components
+│   ├── lib/
+│   │   ├── schemas/         # Zod schemas
+│   │   ├── server/          # Server-only request/session helpers
+│   │   ├── services/        # Import, scoring, optimization, and PDF services
+│   │   ├── auth.ts          # NextAuth configuration
+│   │   ├── env.ts           # Environment validation
+│   │   ├── master-cv.ts     # Master CV DB mapping helpers
+│   │   └── master-cv-text.ts # ATS/plain text CV serialization
+│   ├── middleware.ts        # Auth and admin route protection
+│   └── types/               # Type augmentation
+├── .lando.yml               # Local development services and tooling
+├── .env.example             # Example environment variables
+├── package.json
 └── README.md
 ```
 
----
+## Getting Started
 
-# Installation
-
-## Clone the repository
+The recommended local setup uses Lando.
 
 ```bash
-git clone https://github.com/yourusername/rolevector.git
-cd rolevector
+lando start
+lando prisma migrate deploy
+lando seed
 ```
 
----
+The app is served at:
 
-# Frontend Setup
+```text
+https://rolevector.lndo.site
+```
+
+Useful local accounts from the seed:
+
+```text
+admin@local.local / admin
+demo@rolevector.local / password123
+```
+
+## Environment Variables
+
+Copy `.env.example` to `.env.local` for local secrets and API keys. `.env.local`
+is ignored by Git.
 
 ```bash
-cd frontend
-npm install
-npm run dev
+cp .env.example .env.local
 ```
 
-The frontend will be available at:
-
-```bash
-http://localhost:5173
-```
-
----
-
-# Backend Setup
-
-```bash
-cd backend
-npm install
-npm run dev
-```
-
-The API server will run at:
-
-```bash
-http://localhost:3000
-```
-
----
-
-# Environment Variables
-
-Create a `.env` file in the backend directory:
+Important variables:
 
 ```env
-OPENAI_API_KEY=your_api_key
-PORT=3000
+APP_URL="https://rolevector.lndo.site/"
+DATABASE_URL="postgresql://postgres@database:5432/rolevector"
+NEXTAUTH_URL="https://rolevector.lndo.site"
+NEXTAUTH_SECRET="replace-with-a-long-random-secret"
+NEXT_PUBLIC_APP_URL="https://rolevector.lndo.site/"
+OPENAI_API_KEY=""
+OPENAI_MODEL="gpt-5"
+PUPPETEER_EXECUTABLE_PATH="/usr/bin/chromium"
 ```
 
----
+If `OPENAI_API_KEY` is empty or an OpenAI request fails, optimization falls back
+to the local deterministic optimizer.
 
-# Build
+## Common Commands
 
-## Frontend
+Run commands through Lando when working in the local environment:
 
 ```bash
+lando lint
+lando typecheck
+lando prisma migrate deploy
+lando seed
+lando prisma studio
+```
+
+Package scripts are also available:
+
+```bash
+npm run dev
+npm run lint
 npm run build
-```
-
-## Backend
-
-```bash
 npm run start
+npm run prisma:generate
+npm run prisma:migrate
 ```
 
----
+## Application Workflow
 
-# Development Goals
+1. Create or import a Master CV.
+2. Create a cover letter template using supported tokens.
+3. Create an application from a job opening.
+4. Review the baseline CV snapshot and ATS score.
+5. Regenerate the application CV if the Master CV changed.
+6. Optimize the application CV once.
+7. Review before/after ATS score comparison.
+8. Download the CV and cover letter PDFs as a ZIP archive.
+9. Track application status.
 
-- Improve ATS matching accuracy
-- Support multiple CV strategies
-- Add AI application agents
-- Expand scoring and recommendations
-- Improve PDF rendering
-- Add job tracking and analytics
-- Add recruiter-focused exports
-- Add interview preparation workflows
+## Roles and Access
 
----
+- Anonymous users can view public informational pages.
+- Authenticated users can use the application features.
+- Admin users can use application features and manage users.
 
-# Design Principles
+Deleting a user cascades related Master CV, cover letter, application, usage, and
+error log data through Prisma relations.
 
-- ATS-first architecture
-- Structured over visual editing
-- Single source of truth for career data
-- Minimal manual repetition
-- AI-assisted, not AI-generated spam
-- Maintainable and extensible architecture
+## Design Notes
 
----
+- Master CV data is normalized in PostgreSQL.
+- Application records keep generated optimized CV snapshots for review and PDF
+  export.
+- OpenAI output is validated before persistence.
+- The optimizer restores immutable DB-backed facts before saving generated CVs.
+- PDF output is intentionally ATS-safe and document-format polish is treated as a
+  later enhancement.
 
-# License
+## Status
 
-MIT License
+RoleVector is in active development. The current implementation covers the core
+Master CV, cover letter, application, optimization, scoring, and PDF download
+workflow.
 
----
+## License
 
-# Status
-
-Currently in active development.
+MIT License. See `LICENSE`.
