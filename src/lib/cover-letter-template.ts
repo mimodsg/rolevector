@@ -1,10 +1,15 @@
 import type { MasterCv } from "@/lib/schemas/master-cv";
 import type { ParsedJob } from "@/lib/schemas/job";
+import type { ApplicationContext } from "@/lib/services/application-context";
 
 export const coverLetterTokens = [
   { token: "[Company]", description: "Target company from the job description." },
+  { token: "[CompanyUrl]", description: "Company URL saved on the application." },
+  { token: "[CompanyContext]", description: "Best-effort company page context." },
   { token: "[Role]", description: "Target role from the job description." },
   { token: "[Salary]", description: "Salary from the job opening, when provided." },
+  { token: "[JobApplicationUrl]", description: "Job application URL saved on the application." },
+  { token: "[JobContext]", description: "Best-effort job page context." },
   { token: "[FullName]", description: "Master CV full name." },
   { token: "[Title]", description: "Master CV professional title." },
   { token: "[Email]", description: "Master CV email." },
@@ -29,18 +34,24 @@ export const coverLetterTokens = [
 ] as const;
 
 export function renderCoverLetterTemplate({
+  applicationContext,
   masterCv,
   parsedJob,
   template
 }: {
+  applicationContext?: Partial<ApplicationContext>;
   masterCv: MasterCv;
   parsedJob: ParsedJob;
   template: string;
 }) {
   const replacements: Record<string, string> = {
     "[Company]": parsedJob.company_name ?? "your team",
+    "[CompanyUrl]": applicationContext?.companyUrl ?? "",
+    "[CompanyContext]": applicationContext?.companyContext ?? "",
     "[Role]": parsedJob.position_title ?? "the role",
     "[Salary]": parsedJob.salary ?? "",
+    "[JobApplicationUrl]": applicationContext?.jobApplicationUrl ?? "",
+    "[JobContext]": applicationContext?.jobContext ?? "",
     "[FullName]": masterCv.basics.full_name,
     "[Title]": masterCv.basics.title,
     "[Email]": masterCv.basics.email,

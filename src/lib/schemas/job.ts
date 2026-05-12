@@ -1,8 +1,15 @@
 import { z } from "zod";
 
+const optionalUrlSchema = z.preprocess(
+  (value) => (typeof value === "string" ? value.trim() : value),
+  z.union([z.string().url("Enter a valid URL."), z.literal("")]).optional().default("")
+);
+
 export const jobDescriptionSchema = z.object({
   company: z.string().trim().min(1, "Enter the company name."),
+  companyUrl: optionalUrlSchema,
   jobDetails: z.string().trim().min(50, "Paste the full job details."),
+  jobApplicationUrl: optionalUrlSchema,
   positionTitle: z.string().trim().min(1, "Enter the position title."),
   salary: z.string().trim().optional().default("")
 });

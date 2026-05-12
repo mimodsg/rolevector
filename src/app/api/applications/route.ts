@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createApplicationSchema } from "@/lib/schemas/application";
 import { assertSameOrigin } from "@/lib/server/request";
 import { requireCurrentUserId } from "@/lib/server/session";
+import { extractApplicationContext } from "@/lib/services/application-context";
 import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
 import { generateCoverLetter } from "@/lib/services/cover-letter-generator";
 import { parseJobDescription } from "@/lib/services/job-parser";
@@ -42,9 +43,14 @@ export async function POST(request: Request) {
   try {
     const userId = await requireCurrentUserId();
     assertSameOrigin(request);
-    const { company, jobDetails, positionTitle, salary } = createApplicationSchema.parse(
-      await request.json()
-    );
+    const {
+      company,
+      companyUrl,
+      jobApplicationUrl,
+      jobDetails,
+      positionTitle,
+      salary
+    } = createApplicationSchema.parse(await request.json());
     const masterCvRecord = await prisma.masterCV.findUnique({
       where: { userId },
       include: {
@@ -75,6 +81,10 @@ export async function POST(request: Request) {
       positionTitle,
       salary
     });
+    const applicationContext = await extractApplicationContext({
+      companyUrl,
+      jobApplicationUrl
+    });
     const baselineScore = scoreAtsCompatibility(masterCv, parsedJob).overall;
     const coverLetterTemplate = await prisma.coverLetterTemplate.findUnique({
       where: { userId }
@@ -82,10 +92,14 @@ export async function POST(request: Request) {
     const application = await prisma.application.create({
       data: {
         userId,
+        companyContext: applicationContext.companyContext,
         companyName: parsedJob.company_name,
+        companyUrl: applicationContext.companyUrl,
         positionTitle: parsedJob.position_title,
         salary,
         location: parsedJob.location,
+        jobApplicationUrl: applicationContext.jobApplicationUrl,
+        jobContext: applicationContext.jobContext,
         jobDetails,
         parsedMetadata: parsedJob,
         optimizedCvJson: masterCv,
@@ -93,6 +107,7 @@ export async function POST(request: Request) {
         coverLetterText: generateCoverLetter({
           masterCv,
           parsedJob,
+          applicationContext,
           template: coverLetterTemplate?.content
         }),
         baselineAtsScore: baselineScore,

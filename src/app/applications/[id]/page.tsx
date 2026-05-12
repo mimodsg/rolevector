@@ -19,6 +19,32 @@ function formatDate(date: Date) {
   }).format(date);
 }
 
+function contextInsights(context: string) {
+  if (!context.trim()) {
+    return [];
+  }
+
+  const sources = [...context.matchAll(/^Source:\s*(.+)$/gm)]
+    .map((match) => `Source: ${match[1]?.trim()}`)
+    .filter(Boolean);
+  const title = context.match(/^Title:\s*(.+)$/m)?.[1]?.trim();
+  const description = context.match(/^Description:\s*(.+)$/m)?.[1]?.trim();
+  const body = context
+    .replace(/^Source:\s*.+$/gm, "")
+    .replace(/^Title:\s*.+$/m, "")
+    .replace(/^Description:\s*.+$/m, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  const bodySentences = body
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter((sentence) => sentence.length >= 40)
+    .slice(0, 4);
+
+  return [...new Set([...sources, title, description, ...bodySentences].filter(Boolean))]
+    .slice(0, 6);
+}
+
 export default async function ApplicationPreviewPage({
   params
 }: {
@@ -41,6 +67,13 @@ export default async function ApplicationPreviewPage({
     (application.atsScore - application.baselineAtsScore).toFixed(1)
   );
   const isOptimized = Boolean(application.optimizedAt);
+  const companyInsights = contextInsights(application.companyContext);
+  const jobPageInsights = contextInsights(application.jobContext);
+  const hasAiTailoringContext =
+    application.companyUrl ||
+    application.jobApplicationUrl ||
+    companyInsights.length > 0 ||
+    jobPageInsights.length > 0;
 
   return (
     <AppShell
@@ -145,10 +178,137 @@ export default async function ApplicationPreviewPage({
             </dl>
           </Panel>
           <Panel>
+            <h2 className="font-title text-xl uppercase text-rv-text">
+              AI Tailoring Context
+            </h2>
+            {hasAiTailoringContext ? (
+              <div className="mt-4 grid gap-5 text-sm">
+                <dl className="space-y-3">
+                  {application.companyUrl ? (
+                    <div>
+                      <dt className="font-bold text-rv-text-soft">Company source</dt>
+                      <dd className="mt-1">
+                        <a
+                          className="break-all text-rv-highlight underline-offset-4 hover:underline"
+                          href={application.companyUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {application.companyUrl}
+                        </a>
+                      </dd>
+                    </div>
+                  ) : null}
+                  {application.jobApplicationUrl ? (
+                    <div>
+                      <dt className="font-bold text-rv-text-soft">Job source</dt>
+                      <dd className="mt-1">
+                        <a
+                          className="break-all text-rv-highlight underline-offset-4 hover:underline"
+                          href={application.jobApplicationUrl}
+                          rel="noreferrer"
+                          target="_blank"
+                        >
+                          {application.jobApplicationUrl}
+                        </a>
+                      </dd>
+                    </div>
+                  ) : null}
+                </dl>
+                <div>
+                  <h3 className="font-bold text-rv-text-soft">Company insights</h3>
+                  {companyInsights.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                      {companyInsights.map((insight) => (
+                        <li key={insight}>{insight}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 leading-6 text-rv-text-muted">
+                      No company page text was captured.
+                    </p>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-rv-text-soft">Job page insights</h3>
+                  {jobPageInsights.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                      {jobPageInsights.map((insight) => (
+                        <li key={insight}>{insight}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 leading-6 text-rv-text-muted">
+                      No job page text was captured beyond the pasted job details.
+                    </p>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <p className="mt-4 text-sm leading-6 text-rv-text-muted">
+                No URL context was added for this application.
+              </p>
+            )}
+          </Panel>
+          <Panel>
             <h2 className="font-title text-xl uppercase text-rv-text">Job Details</h2>
+            {application.companyUrl || application.jobApplicationUrl ? (
+              <dl className="mt-4 space-y-3 text-sm">
+                {application.companyUrl ? (
+                  <div>
+                    <dt className="font-bold text-rv-text-soft">Company URL</dt>
+                    <dd className="mt-1">
+                      <a
+                        className="break-all text-rv-highlight underline-offset-4 hover:underline"
+                        href={application.companyUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {application.companyUrl}
+                      </a>
+                    </dd>
+                  </div>
+                ) : null}
+                {application.jobApplicationUrl ? (
+                  <div>
+                    <dt className="font-bold text-rv-text-soft">Job application URL</dt>
+                    <dd className="mt-1">
+                      <a
+                        className="break-all text-rv-highlight underline-offset-4 hover:underline"
+                        href={application.jobApplicationUrl}
+                        rel="noreferrer"
+                        target="_blank"
+                      >
+                        {application.jobApplicationUrl}
+                      </a>
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+            ) : null}
             <p className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-rv-text-muted">
               {application.jobDetails}
             </p>
+            {application.companyContext || application.jobContext ? (
+              <div className="mt-4 grid gap-4 text-sm">
+                {application.companyContext ? (
+                  <div>
+                    <h3 className="font-bold text-rv-text-soft">Company context</h3>
+                    <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap leading-6 text-rv-text-muted">
+                      {application.companyContext}
+                    </p>
+                  </div>
+                ) : null}
+                {application.jobContext ? (
+                  <div>
+                    <h3 className="font-bold text-rv-text-soft">Job page context</h3>
+                    <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap leading-6 text-rv-text-muted">
+                      {application.jobContext}
+                    </p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </Panel>
         </aside>
       </section>

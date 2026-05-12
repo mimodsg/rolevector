@@ -60,6 +60,12 @@ export async function POST(
     const masterCv = masterCvRecordToMasterCv(masterCvRecord);
     const masterCvText = masterCvToOptimizationText(masterCv);
     const parsedJob = parsedJobSchema.parse(application.parsedMetadata);
+    const applicationContext = {
+      companyContext: application.companyContext,
+      companyUrl: application.companyUrl,
+      jobApplicationUrl: application.jobApplicationUrl,
+      jobContext: application.jobContext
+    };
     const baselineScore = scoreAtsCompatibility(masterCv, parsedJob).overall;
     const coverLetterTemplate = await prisma.coverLetterTemplate.findUnique({
       where: { userId }
@@ -70,6 +76,7 @@ export async function POST(
         atsScore: baselineScore,
         baselineAtsScore: baselineScore,
         coverLetterText: generateCoverLetter({
+          applicationContext,
           masterCv,
           parsedJob,
           template: coverLetterTemplate?.content

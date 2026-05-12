@@ -5,6 +5,10 @@ import type { MasterCv } from "@/lib/schemas/master-cv";
 import type { ParsedJob } from "@/lib/schemas/job";
 import { env } from "@/lib/env";
 import { masterCvSchema } from "@/lib/schemas/master-cv";
+import {
+  applicationContextToText,
+  type ApplicationContext
+} from "./application-context";
 import { generateCoverLetter } from "./cover-letter-generator";
 import { scoreAtsCompatibility } from "./ats-scoring";
 
@@ -13,29 +17,14 @@ const openai = env.OPENAI_API_KEY
       apiKey: env.OPENAI_API_KEY
     })
   : null;
-const frontendExpertise = [
-  "React.js",
-  "Next.js",
-  "JavaScript (ES6+)",
-  "TypeScript",
-  "React Hooks",
-  "Component Architecture",
-  "State Management",
-  "Tailwind CSS",
-  "Responsive Design",
-  "Semantic HTML",
-  "Accessibility (WCAG)",
-  "Design Systems",
-  "Storybook",
-  "Performance Optimization",
-  "SSR/SSG",
-  "Lazy Loading",
-  "Code Splitting",
-  "Lighthouse",
-  "Core Web Vitals",
-  "REST APIs",
-  "GraphQL"
-];
+
+type JobProfile = {
+  contextTerms: string[];
+  emphasizedTerms: string[];
+  positionTitle: string;
+  repeatedTerms: string[];
+  requiredTerms: string[];
+};
 
 const aiMasterCvSchema = z.object({
   basics: z.object({
@@ -119,12 +108,16 @@ export type OptimizationResult = {
 };
 
 export async function optimizeApplication({
+  applicationContext,
   coverLetterTemplate,
+  jobDetails,
   masterCv,
   masterCvText,
   parsedJob
 }: {
+  applicationContext?: Partial<ApplicationContext>;
   coverLetterTemplate?: string;
+  jobDetails?: string;
   masterCv: MasterCv;
   masterCvText: string;
   parsedJob: ParsedJob;
@@ -132,16 +125,20 @@ export async function optimizeApplication({
   if (openai) {
     try {
       return await optimizeWithOpenAI({
+        applicationContext,
         coverLetterTemplate,
+        jobDetails,
         masterCv,
         masterCvText,
         parsedJob
       });
     } catch (error) {
       return optimizeDeterministically({
+        applicationContext,
         coverLetterTemplate,
         fallbackReason:
           error instanceof Error ? error.message : "Unknown OpenAI optimization error.",
+        jobDetails,
         masterCv,
         masterCvText,
         parsedJob
@@ -150,7 +147,9 @@ export async function optimizeApplication({
   }
 
   return optimizeDeterministically({
+    applicationContext,
     coverLetterTemplate,
+    jobDetails,
     masterCv,
     masterCvText,
     parsedJob
@@ -158,16 +157,22 @@ export async function optimizeApplication({
 }
 
 async function optimizeWithOpenAI({
+  applicationContext,
   coverLetterTemplate,
+  jobDetails,
   masterCv,
   masterCvText,
   parsedJob
 }: {
+  applicationContext?: Partial<ApplicationContext>;
   coverLetterTemplate?: string;
+  jobDetails?: string;
   masterCv: MasterCv;
   masterCvText: string;
   parsedJob: ParsedJob;
 }): Promise<OptimizationResult> {
+  const contextText = applicationContextToText(applicationContext);
+  const jobProfile = buildJobProfile({ contextText, jobDetails, parsedJob });
   const response = await openai!.responses.parse({
     input: [
       {
@@ -177,10 +182,16 @@ async function optimizeWithOpenAI({
           "Return one complete Master CV object matching the requested schema.",
           "Preserve identity, contact details, employers, titles, dates, education, certifications, languages, and project/client facts.",
           "Do not invent skills, companies, dates, degrees, certifications, metrics, clients, or responsibilities.",
-          "Use the job details to reorder and emphasize existing relevant skills, experience, projects, summary language, and hidden keywords.",
-          "For frontend React roles, reposition toward Senior Front-End Engineer / Frontend Architecture Lead and reduce CMS-heavy repetition.",
+          "Use the full raw job details as the source of truth for role targeting, keyword emphasis, summary language, and section ordering.",
+          "Use the supplied company and job page context to tune emphasis and cover letter relevance, but do not invent facts from that context.",
+          "Infer the role positioning from the specific application data. Do not assume a predefined role family, specialty, or technology focus.",
+          "The Professional Summary must lead with the target role and the strongest repeated or explicitly required requirements from the raw job details.",
+          "Write like a senior human resume writer, not like a keyword generator. Use natural, concise accomplishment language with active verbs.",
+          "Preserve ATS terms, but integrate them into readable phrases instead of dumping symbol-heavy keyword strings into prose.",
+          "Avoid AI-sounding filler such as leverages, robust, dynamic, cutting-edge, seasoned professional, passionate, proven track record, and results-driven unless already present in the Master CV.",
+          "Avoid shorthand transitions such as arrows, excessive slashes, parenthetical keyword stacks, and repeated buzzword lists in summaries or bullets.",
+          "Dedicated sections should be populated only when their topic is clearly relevant to this job. Leave a dedicated section empty when it would skew the CV away from the posting.",
           "Normalize NextJS to Next.js wherever it appears.",
-          "When frontend expertise is supported by the Master CV, populate frontend_expertise with React.js, Next.js, JavaScript (ES6+), TypeScript, React Hooks, Component Architecture, State Management, Tailwind CSS, Responsive Design, Semantic HTML, Accessibility (WCAG), Design Systems, Storybook, Performance Optimization, SSR/SSG, Lazy Loading, Code Splitting, Lighthouse, Core Web Vitals, REST APIs, GraphQL.",
           "Do not let Early Career include recent roles. The application will group the oldest four experience entries into early_career when enough entries exist.",
           "Keep output ATS-friendly: plain text descriptions, standard section-ready content, direct keyword alignment, no tables, no decorative markup.",
           "If the job requests a skill that is not supported by the Master CV, do not add it as experience."
@@ -190,6 +201,9 @@ async function optimizeWithOpenAI({
         role: "user",
         content: JSON.stringify({
           job: parsedJob,
+          job_profile: jobProfile,
+          raw_job_details: jobDetails ?? "",
+          application_context: contextText,
           master_cv_text: masterCvText,
           master_cv_structured: masterCv
         })
@@ -208,14 +222,15 @@ async function optimizeWithOpenAI({
   }
 
   const optimizedCvJson = applyEarlyCareerGrouping({
-    optimized: applyTargetedEnhancements(
+    optimized: applyGenericEnhancements(
       preserveDbFacts(masterCv, masterCvSchema.parse(parsed)),
-      parsedJob
+      jobProfile
     ),
     source: masterCv
   });
   const score = scoreAtsCompatibility(optimizedCvJson, parsedJob);
   const coverLetterText = generateCoverLetter({
+    applicationContext,
     masterCv: optimizedCvJson,
     parsedJob,
     template: coverLetterTemplate
@@ -233,7 +248,11 @@ async function optimizeWithOpenAI({
         "OpenAI structured output optimized the CV from DB-backed Master CV facts.",
         `Master CV source serialized to ${masterCvText.length} characters before optimization.`,
         "Output was validated against the Master CV application schema before saving.",
-        "Immutable source facts were restored from the DB-backed Master CV before persistence."
+        "Immutable source facts were restored from the DB-backed Master CV before persistence.",
+        `Derived ${jobProfile.emphasizedTerms.length} emphasized terms from the job details.`,
+        ...(contextText
+          ? ["Company and job page context was included as secondary optimization context."]
+          : [])
       ],
       outputTokens: response.usage?.output_tokens ?? 0,
       totalTokens: response.usage?.total_tokens ?? 0
@@ -242,26 +261,30 @@ async function optimizeWithOpenAI({
 }
 
 function optimizeDeterministically({
+  applicationContext,
   coverLetterTemplate,
   fallbackReason,
+  jobDetails,
   masterCv,
   masterCvText,
   parsedJob
 }: {
+  applicationContext?: Partial<ApplicationContext>;
   coverLetterTemplate?: string;
   fallbackReason?: string;
+  jobDetails?: string;
   masterCv: MasterCv;
   masterCvText: string;
   parsedJob: ParsedJob;
 }): OptimizationResult {
-  const relevantTerms = matchedCvTerms(masterCvText, parsedJob);
+  const contextText = applicationContextToText(applicationContext);
+  const jobProfile = buildJobProfile({ contextText, jobDetails, parsedJob });
+  const relevantTerms = matchedCvTerms(masterCvText, parsedJob, jobProfile);
   const relevantSkillSet = new Set(relevantTerms.map(normalize));
 
   const optimizedCvJson: MasterCv = {
     ...masterCv,
-    frontend_expertise: shouldUseFrontendExpertise(parsedJob)
-      ? frontendExpertise
-      : masterCv.frontend_expertise,
+    frontend_expertise: filterByRelevance(masterCv.frontend_expertise, relevantSkillSet),
     hard_skills: sortByRelevance(masterCv.hard_skills, relevantSkillSet),
     soft_skills: sortByRelevance(masterCv.soft_skills, relevantSkillSet),
     summary: optimizeSummary(masterCv, parsedJob, relevantTerms),
@@ -295,12 +318,13 @@ function optimizeDeterministically({
     }
   };
   const groupedOptimizedCvJson = applyEarlyCareerGrouping({
-    optimized: optimizedCvJson,
+    optimized: applyGenericEnhancements(optimizedCvJson, jobProfile),
     source: masterCv
   });
   const score = scoreAtsCompatibility(groupedOptimizedCvJson, parsedJob);
 
   const coverLetterText = generateCoverLetter({
+    applicationContext,
     masterCv: groupedOptimizedCvJson,
     parsedJob,
     template: coverLetterTemplate
@@ -320,6 +344,10 @@ function optimizeDeterministically({
         `Master CV source serialized to ${masterCvText.length} characters before optimization.`,
         `Matched ${relevantTerms.length} job terms already present in the application CV.`,
         "Skills, work experience, projects, and summary emphasis were reordered for job relevance.",
+        `Derived ${jobProfile.emphasizedTerms.length} emphasized terms from the job details.`,
+        ...(contextText
+          ? ["Company and job page context was included as secondary tailoring context."]
+          : []),
         ...(fallbackReason ? [`OpenAI fallback reason: ${fallbackReason}`] : [])
       ],
       outputTokens: 0,
@@ -361,47 +389,58 @@ function preserveDbFacts(source: MasterCv, optimized: MasterCv): MasterCv {
   });
 }
 
-function applyTargetedEnhancements(masterCv: MasterCv, parsedJob: ParsedJob) {
-  if (!shouldUseFrontendExpertise(parsedJob)) {
-    return masterCvSchema.parse({
-      ...masterCv,
-      languages: selectRelevantLanguages(masterCv.languages, parsedJob)
-    });
-  }
+function applyGenericEnhancements(masterCv: MasterCv, jobProfile: JobProfile) {
+  const profileTerms = new Set(jobProfile.emphasizedTerms.map(normalize));
 
   return masterCvSchema.parse({
     ...masterCv,
-    frontend_expertise: frontendExpertise,
-    summary: frontendSummary(masterCv, parsedJob),
+    summary: polishResumeProse(masterCv.summary),
+    frontend_expertise: filterByRelevance(
+      normalizeSkillNames(masterCv.frontend_expertise),
+      profileTerms
+    ),
     hard_skills: normalizeSkillNames(masterCv.hard_skills),
     technical_skills: {
-      languages: normalizeSkillNames(masterCv.technical_skills.languages),
-      frameworks: normalizeSkillNames(masterCv.technical_skills.frameworks),
-      cms: normalizeSkillNames(masterCv.technical_skills.cms),
-      tools: normalizeSkillNames(masterCv.technical_skills.tools)
+      languages: sortByRelevance(
+        normalizeSkillNames(masterCv.technical_skills.languages),
+        profileTerms
+      ),
+      frameworks: sortByRelevance(
+        normalizeSkillNames(masterCv.technical_skills.frameworks),
+        profileTerms
+      ),
+      cms: sortByRelevance(normalizeSkillNames(masterCv.technical_skills.cms), profileTerms),
+      tools: sortByRelevance(
+        normalizeSkillNames(masterCv.technical_skills.tools),
+        profileTerms
+      )
     },
     work_experience: masterCv.work_experience.map((item) => ({
       ...item,
-      description: frontendExperienceDescription(item.description),
+      description: polishResumeProse(item.description),
       hard_skills: normalizeSkillNames(item.hard_skills),
+      soft_skills: normalizeSkillNames(item.soft_skills),
       programming_languages: normalizeSkillNames(item.programming_languages),
       frameworks: normalizeSkillNames(item.frameworks),
+      cms: normalizeSkillNames(item.cms),
       tools: normalizeSkillNames(item.tools)
+    })),
+    early_career: {
+      date_range: polishResumeProse(masterCv.early_career.date_range),
+      summary: polishResumeProse(masterCv.early_career.summary)
+    },
+    projects: masterCv.projects.map((project) => ({
+      ...project,
+      description: polishResumeProse(project.description)
     })),
     hidden_context: {
       additional_experience: masterCv.hidden_context.additional_experience,
-      keywords: unique([
-        ...masterCv.hidden_context.keywords,
-        ...frontendExpertise,
-        "Keyboard Navigation",
-        "Screen Reader Accessibility",
-        "Cross-browser Compatibility",
-        "SEO Optimization",
-        "Sass/SCSS",
-        "Styled Components"
-      ])
+      keywords: sortByRelevance(
+        unique([...masterCv.hidden_context.keywords, ...jobProfile.emphasizedTerms]),
+        profileTerms
+      )
     },
-    languages: selectRelevantLanguages(masterCv.languages, parsedJob)
+    languages: selectRelevantLanguages(masterCv.languages, jobProfile)
   });
 }
 
@@ -484,48 +523,41 @@ function earlyCareerDateRange(items: MasterCv["work_experience"]) {
   return [start, end].filter(Boolean).join(" to ");
 }
 
-function shouldUseFrontendExpertise(parsedJob: ParsedJob) {
-  const jobText = normalize(
-    [
-      parsedJob.position_title ?? "",
-      parsedJob.seniority ?? "",
-      ...parsedJob.required_skills,
-      ...parsedJob.preferred_skills,
-      ...parsedJob.keywords,
-      ...parsedJob.responsibilities
-    ].join(" ")
-  );
+function buildJobProfile({
+  contextText,
+  jobDetails,
+  parsedJob
+}: {
+  contextText?: string;
+  jobDetails?: string;
+  parsedJob: ParsedJob;
+}): JobProfile {
+  const requiredTerms = unique([
+    ...parsedJob.required_skills,
+    ...parsedJob.preferred_skills
+  ]);
+  const parsedTerms = unique([
+    ...requiredTerms,
+    ...parsedJob.keywords,
+    ...parsedJob.responsibilities.flatMap(splitPhraseTerms),
+    ...splitPhraseTerms(parsedJob.position_title ?? ""),
+    ...splitPhraseTerms(parsedJob.seniority ?? "")
+  ]);
+  const repeatedTerms = extractRepeatedTerms([jobDetails ?? "", contextText ?? ""].join("\n"));
+  const contextTerms = extractRepeatedTerms(contextText ?? "").slice(0, 20);
+  const emphasizedTerms = unique([
+    ...requiredTerms,
+    ...repeatedTerms,
+    ...parsedTerms
+  ]).slice(0, 40);
 
-  return /\b(frontend|front end|front-end|react|next\.?js|javascript|typescript|ui)\b/.test(
-    jobText
-  );
-}
-
-function frontendSummary(masterCv: MasterCv, parsedJob: ParsedJob) {
-  const role = parsedJob.position_title ?? "senior frontend engineering roles";
-  const currentSummary = normalizeSkillNames([masterCv.summary])[0] ?? masterCv.summary;
-
-  return [
-    `Senior frontend engineer and frontend architecture specialist focused on React.js, Next.js, TypeScript, accessible UI systems, performance optimization, and SEO-friendly applications for enterprise platforms.`,
-    `Experienced translating product, design, and backend requirements into scalable component architecture, reusable frontend patterns, responsive interfaces, and API-integrated client-facing functionality for ${role}.`,
-    currentSummary
-  ]
-    .filter(Boolean)
-    .join("\n\n");
-}
-
-function frontendExperienceDescription(description: string) {
-  const normalized = normalizeSkillNames([description])[0] ?? description;
-  const hasFrontendTerms =
-    /react\.js|next\.js|frontend|component|accessibility|responsive|performance/i.test(
-      normalized
-    );
-
-  if (hasFrontendTerms || !normalized) {
-    return normalized;
-  }
-
-  return `${normalized}\n\nDelivered frontend architecture, reusable components, semantic HTML, responsive design, WCAG accessibility, client-facing functionality, scalable UI systems, API integrations, and performance optimization across enterprise web platforms.`;
+  return {
+    contextTerms,
+    emphasizedTerms,
+    positionTitle: parsedJob.position_title ?? "",
+    repeatedTerms,
+    requiredTerms
+  };
 }
 
 function normalizeSkillNames(items: string[]) {
@@ -539,17 +571,29 @@ function normalizeSkillNames(items: string[]) {
   );
 }
 
-function selectRelevantLanguages(languages: string[], parsedJob: ParsedJob) {
-  const jobText = normalize(
-    [
-      parsedJob.position_title ?? "",
-      parsedJob.seniority ?? "",
-      ...parsedJob.required_skills,
-      ...parsedJob.preferred_skills,
-      ...parsedJob.keywords,
-      ...parsedJob.responsibilities
-    ].join(" ")
-  );
+function polishResumeProse(value: string) {
+  return value
+    .replace(/\s*→\s*/g, " to ")
+    .replace(/\s*->\s*/g, " to ")
+    .replace(/\b([A-Za-z0-9.+#]+)\s*\/\s*([A-Za-z0-9.+#]+)\b/g, "$1 and $2")
+    .replace(/\bLeveraged\b/g, "Used")
+    .replace(/\bleveraged\b/g, "used")
+    .replace(/\bRobust\b/g, "Reliable")
+    .replace(/\brobust\b/g, "reliable")
+    .replace(/\bDynamic\b/g, "Fast-moving")
+    .replace(/\bdynamic\b/g, "fast-moving")
+    .replace(/\bcutting-edge\b/gi, "modern")
+    .replace(/\bseasoned professional\b/gi, "senior professional")
+    .replace(/\bpassionate\b/gi, "focused")
+    .replace(/\bproven track record of\b/gi, "experience")
+    .replace(/\bresults-driven\b/gi, "delivery-focused")
+    .replace(/\s{2,}/g, " ")
+    .replace(/ ?\n ?/g, "\n")
+    .trim();
+}
+
+function selectRelevantLanguages(languages: string[], jobProfile: JobProfile) {
+  const jobText = normalize(jobProfile.emphasizedTerms.join(" "));
   const mentioned = languages.filter((language) => {
     const name = normalize(language).split(" ")[0] ?? "";
 
@@ -563,13 +607,15 @@ function selectRelevantLanguages(languages: string[], parsedJob: ParsedJob) {
 function optimizeSummary(masterCv: MasterCv, parsedJob: ParsedJob, relevantTerms: string[]) {
   const role = parsedJob.position_title ?? "this role";
   const topTerms = relevantTerms.slice(0, 6).join(", ");
-  const baseSummary = masterCv.summary.trim();
+  const baseSummary = polishResumeProse(masterCv.summary);
 
   if (!topTerms) {
     return baseSummary;
   }
 
-  const alignmentSentence = `Relevant strengths for ${role} include ${topTerms}.`;
+  const alignmentSentence = polishResumeProse(
+    `Relevant strengths for ${role} include ${topTerms}.`
+  );
 
   if (!baseSummary) {
     return alignmentSentence;
@@ -582,9 +628,14 @@ function optimizeSummary(masterCv: MasterCv, parsedJob: ParsedJob, relevantTerms
   return `${baseSummary}\n\n${alignmentSentence}`;
 }
 
-function matchedCvTerms(masterCvText: string, parsedJob: ParsedJob) {
+function matchedCvTerms(
+  masterCvText: string,
+  parsedJob: ParsedJob,
+  jobProfile: JobProfile
+) {
   const cvText = normalize(masterCvText);
   const terms = unique([
+    ...jobProfile.emphasizedTerms,
     ...parsedJob.required_skills,
     ...parsedJob.preferred_skills,
     ...parsedJob.keywords,
@@ -595,13 +646,35 @@ function matchedCvTerms(masterCvText: string, parsedJob: ParsedJob) {
   return terms.filter((term) => cvText.includes(normalize(term))).slice(0, 40);
 }
 
+function filterByRelevance(items: string[], relevantTerms: Set<string>) {
+  if (relevantTerms.size === 0) {
+    return [];
+  }
+
+  return items.filter((item) => {
+    const itemTerms = splitPhraseTerms(item).map(normalize);
+
+    return itemTerms.some((term) => hasRelevantOverlap(term, relevantTerms));
+  });
+}
+
 function sortByRelevance(items: string[], relevantTerms: Set<string>) {
   return [...items].sort((a, b) => {
-    const aRelevant = relevantTerms.has(normalize(a)) ? 0 : 1;
-    const bRelevant = relevantTerms.has(normalize(b)) ? 0 : 1;
+    const aRelevant = hasRelevantOverlap(normalize(a), relevantTerms) ? 0 : 1;
+    const bRelevant = hasRelevantOverlap(normalize(b), relevantTerms) ? 0 : 1;
 
     return aRelevant - bRelevant || a.localeCompare(b);
   });
+}
+
+function hasRelevantOverlap(value: string, relevantTerms: Set<string>) {
+  if (!value) {
+    return false;
+  }
+
+  return [...relevantTerms].some(
+    (term) => term && (value.includes(term) || term.includes(value))
+  );
 }
 
 function relevanceScore(text: string, terms: string[]) {
@@ -628,6 +701,112 @@ function splitTerm(value: string) {
     .filter((term) => term.length > 2);
 }
 
+function splitPhraseTerms(value: string) {
+  return value
+    .split(/,|\n|;|\||\/|•|-|\(|\)/)
+    .flatMap((part) => {
+      const trimmed = part.trim();
+      const words = trimmed.split(/\s+/).filter(Boolean);
+
+      if (words.length <= 4) {
+        return [trimmed, ...words];
+      }
+
+      return words;
+    })
+    .map((term) => term.trim())
+    .filter((term) => term.length > 2 && !stopWords.has(normalize(term)));
+}
+
+function extractRepeatedTerms(value: string) {
+  const counts = new Map<string, { label: string; count: number }>();
+
+  for (const term of splitPhraseTerms(value)) {
+    const normalized = normalize(term);
+
+    if (!normalized || stopWords.has(normalized)) {
+      continue;
+    }
+
+    const current = counts.get(normalized);
+    counts.set(normalized, {
+      label: current?.label ?? term,
+      count: (current?.count ?? 0) + 1
+    });
+  }
+
+  return [...counts.values()]
+    .filter((item) => item.count > 1 || /[A-Z0-9+#.]/.test(item.label))
+    .sort((a, b) => b.count - a.count || a.label.localeCompare(b.label))
+    .map((item) => item.label)
+    .slice(0, 40);
+}
+
 function unique(values: string[]) {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
+
+const stopWords = new Set([
+  "able",
+  "about",
+  "according",
+  "across",
+  "additional",
+  "all",
+  "also",
+  "and",
+  "any",
+  "application",
+  "are",
+  "benefits",
+  "candidate",
+  "candidates",
+  "company",
+  "complex",
+  "concepts",
+  "day",
+  "deliver",
+  "delivered",
+  "details",
+  "different",
+  "dynamic",
+  "each",
+  "eligible",
+  "environment",
+  "experience",
+  "field",
+  "for",
+  "from",
+  "full",
+  "have",
+  "including",
+  "job",
+  "knowledgeable",
+  "multiple",
+  "must",
+  "opening",
+  "opportunity",
+  "other",
+  "position",
+  "preferred",
+  "project",
+  "projects",
+  "provided",
+  "required",
+  "requirements",
+  "responsible",
+  "role",
+  "skills",
+  "strong",
+  "team",
+  "technical",
+  "the",
+  "this",
+  "through",
+  "using",
+  "with",
+  "work",
+  "working",
+  "years",
+  "your"
+]);

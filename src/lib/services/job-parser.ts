@@ -1,17 +1,48 @@
 import { parsedJobSchema, type ParsedJob } from "@/lib/schemas/job";
 
 const skillKeywords = [
-  "TypeScript",
+  "API",
+  "Accessibility",
+  "Acquia",
+  "Agile",
+  "Akamai",
+  "Angular",
+  "CI/CD",
+  "CMS",
+  "CSS",
+  "Docker",
+  "Drupal",
+  "Drupal 7",
+  "Drupal 8",
+  "Drupal 9",
+  "GraphQL",
+  "HTML5",
   "JavaScript",
-  "React",
+  "JIRA",
+  "Kubernetes",
+  "Linux",
+  "Microsoft SQL",
+  "MySQL",
   "Next.js",
   "Node.js",
+  "OpenAI",
+  "PDF",
+  "PHP",
   "PostgreSQL",
   "Prisma",
+  "Rancher",
+  "React",
+  "ReactJS",
+  "Responsive Design",
+  "REST",
+  "Sass",
+  "SCSS",
+  "SDLC",
+  "SiteImprove",
+  "SOLR",
   "TailwindCSS",
-  "OpenAI",
-  "API",
-  "PDF"
+  "Twig",
+  "TypeScript"
 ];
 
 export function parseJobDescription({
@@ -31,8 +62,15 @@ export function parseJobDescription({
     .filter(Boolean);
 
   const matchedSkills = skillKeywords.filter((skill) =>
-    jobDetails.toLowerCase().includes(skill.toLowerCase())
+    normalize(jobDetails).includes(normalize(skill))
   );
+  const responsibilities = lines
+    .filter((line) =>
+      /^[-*]|responsib|required|qualification|experience|development|architecture|migration|implementation|troubleshooting|maintenance|mentor|technical/i.test(
+        line
+      )
+    )
+    .slice(0, 16);
 
   return parsedJobSchema.parse({
     company_name: company,
@@ -46,7 +84,7 @@ export function parseJobDescription({
       null,
     required_skills: matchedSkills,
     preferred_skills: [],
-    responsibilities: lines.filter((line) => /^[-*]|responsib/i.test(line)).slice(0, 8),
+    responsibilities,
     keywords: Array.from(
       new Set([
         ...matchedSkills,
@@ -54,4 +92,8 @@ export function parseJobDescription({
       ])
     )
   });
+}
+
+function normalize(value: string) {
+  return value.toLowerCase().replace(/[^a-z0-9+#.]+/g, " ").trim();
 }

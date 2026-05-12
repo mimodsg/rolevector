@@ -41,8 +41,10 @@ async function parseResponse<TPayload extends object>(response: Response) {
 export function OptimizeForm() {
   const router = useRouter();
   const [company, setCompany] = useState("");
+  const [companyUrl, setCompanyUrl] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [jobDetails, setJobDetails] = useState("");
+  const [jobApplicationUrl, setJobApplicationUrl] = useState("");
   const [isOptimizing, setIsOptimizing] = useState(false);
   const [positionTitle, setPositionTitle] = useState("");
   const [result, setResult] = useState<OptimizeResponse | null>(null);
@@ -58,7 +60,14 @@ export function OptimizeForm() {
         await fetch("/api/applications", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ company, jobDetails, positionTitle, salary })
+          body: JSON.stringify({
+            company,
+            companyUrl,
+            jobApplicationUrl,
+            jobDetails,
+            positionTitle,
+            salary
+          })
         })
       );
 
@@ -102,6 +111,30 @@ export function OptimizeForm() {
             value={salary}
           />
         </Field>
+        <div className="mt-4 grid items-start gap-4 md:grid-cols-2">
+          <Field
+            helper="Optional company site used as best-effort context for tailoring."
+            label="Company URL"
+          >
+            <TextInput
+              onChange={(event) => setCompanyUrl(event.currentTarget.value)}
+              placeholder="https://company.com"
+              type="url"
+              value={companyUrl}
+            />
+          </Field>
+          <Field
+            helper="Optional public job post URL used as best-effort context."
+            label="Job application URL"
+          >
+            <TextInput
+              onChange={(event) => setJobApplicationUrl(event.currentTarget.value)}
+              placeholder="https://company.com/careers/role"
+              type="url"
+              value={jobApplicationUrl}
+            />
+          </Field>
+        </div>
         <Field
           helper="Paste the full job responsibilities, requirements, benefits, and any ATS-relevant details."
           htmlFor="job-details-input"
