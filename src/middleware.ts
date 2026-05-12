@@ -17,6 +17,7 @@ export default withAuth({
 
 export const config = {
   matcher: [
+    "/account/:path*",
     "/admin/:path*",
     "/applications/:path*",
     "/cover-letter/:path*",

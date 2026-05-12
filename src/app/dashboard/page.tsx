@@ -1,17 +1,61 @@
 import { AppShell } from "@/components/app-shell";
+import { StatusPill } from "@/components/status-pill";
 import { ButtonLink } from "@/components/ui/button";
 import { Metric } from "@/components/ui/metric";
 import { Panel } from "@/components/ui/panel";
-import { Alert, Tag } from "@/components/ui/badge";
+import {
+  DataTable,
+  DataTableBody,
+  DataTableCell,
+  DataTableHead,
+  DataTableHeader,
+  DataTableRow
+} from "@/components/ui/table";
+import { prisma } from "@/lib/prisma";
+import { requireCurrentUserId } from "@/lib/server/session";
 
-const metrics = [
-  { label: "Applications", value: "0" },
-  { label: "Average ATS score", value: "-" },
-  { label: "Interviews", value: "0" },
-  { label: "Offers", value: "0" }
-];
+function formatDate(date: Date) {
+  return new Intl.DateTimeFormat("en", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric"
+  }).format(date);
+}
 
-export default function DashboardPage() {
+function formatScore(score: number | null) {
+  return score === null ? "-" : score.toFixed(1);
+}
+
+export default async function DashboardPage() {
+  const userId = await requireCurrentUserId();
+  const [applicationCount, averageScore, interviewingCount, offerCount, recentApplications] =
+    await Promise.all([
+      prisma.application.count({
+        where: { userId }
+      }),
+      prisma.application.aggregate({
+        _avg: { atsScore: true },
+        where: { userId }
+      }),
+      prisma.application.count({
+        where: { status: "Interviewing", userId }
+      }),
+      prisma.application.count({
+        where: { status: "Offer", userId }
+      }),
+      prisma.application.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 5,
+        where: { userId }
+      })
+    ]);
+  const metrics = [
+    { label: "Applications", value: applicationCount },
+    { label: "Average ATS score", value: formatScore(averageScore._avg.atsScore) },
+    { label: "Interviews", value: interviewingCount },
+    { label: "Offers", value: offerCount }
+  ];
+
   return (
     <AppShell
       actions={
@@ -31,15 +75,55 @@ export default function DashboardPage() {
           <h2 className="font-title text-xl uppercase text-rv-text">
             Recent applications
           </h2>
-          <Tag>JSON Source</Tag>
-          <Tag>PDF Output</Tag>
         </div>
-        <p className="mt-3 text-sm leading-6 text-rv-text-muted">
-          Application history will appear here after the first optimization.
-        </p>
-        <Alert className="mt-4" tone="warning">
-          Seed data is available in the database; list rendering comes in the next feature slice.
-        </Alert>
+        <div className="mt-4">
+          <DataTable>
+            <DataTableHead>
+              <DataTableRow className="border-t-0 hover:bg-transparent">
+                <DataTableHeader>Position</DataTableHeader>
+                <DataTableHeader>Company</DataTableHeader>
+                <DataTableHeader>Score</DataTableHeader>
+                <DataTableHeader>Date</DataTableHeader>
+                <DataTableHeader>Status</DataTableHeader>
+                <DataTableHeader>Actions</DataTableHeader>
+              </DataTableRow>
+            </DataTableHead>
+            <DataTableBody>
+              {recentApplications.length === 0 ? (
+                <DataTableRow>
+                  <DataTableCell className="text-rv-text-muted" colSpan={6}>
+                    No applications yet.
+                  </DataTableCell>
+                </DataTableRow>
+              ) : (
+                recentApplications.map((application) => (
+                  <DataTableRow key={application.id}>
+                    <DataTableCell className="text-rv-text">
+                      {application.positionTitle ?? "Untitled position"}
+                    </DataTableCell>
+                    <DataTableCell className="text-rv-text-muted">
+                      {application.companyName ?? "Unknown company"}
+                    </DataTableCell>
+                    <DataTableCell className="text-rv-text-muted">
+                      {application.atsScore.toFixed(1)}
+                    </DataTableCell>
+                    <DataTableCell className="text-rv-text-muted">
+                      {formatDate(application.createdAt)}
+                    </DataTableCell>
+                    <DataTableCell>
+                      <StatusPill status={application.status} />
+                    </DataTableCell>
+                    <DataTableCell>
+                      <ButtonLink href={`/applications/${application.id}`} variant="ghost">
+                        Preview
+                      </ButtonLink>
+                    </DataTableCell>
+                  </DataTableRow>
+                ))
+              )}
+            </DataTableBody>
+          </DataTable>
+        </div>
       </Panel>
     </AppShell>
   );
