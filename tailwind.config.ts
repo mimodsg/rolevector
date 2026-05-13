@@ -24,6 +24,8 @@ const config: Config = {
           "accent-soft": "var(--color-accent-soft)",
           highlight: "var(--color-highlight)",
           "highlight-soft": "var(--color-highlight-soft)",
+          warning: "var(--color-warning)",
+          "warning-soft": "var(--color-warning-soft)",
           error: "var(--color-error)",
           "error-soft": "var(--color-error-soft)"
         }
