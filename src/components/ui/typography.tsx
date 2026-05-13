@@ -8,7 +8,7 @@ export function Eyebrow({
   return (
     <span
       className={cn(
-        "inline-flex w-fit items-center rounded-full bg-rv-primary-soft px-3 py-1 font-title text-sm font-medium uppercase tracking-[0.08em] text-rv-highlight",
+        "inline-flex w-fit items-center rounded-rvsm border border-rv-primary bg-rv-primary-soft px-3 py-1 font-title text-sm font-medium uppercase text-rv-primary-dark",
         className
       )}
       {...props}
@@ -26,7 +26,7 @@ export function PageTitle({
   return (
     <h1
       className={cn(
-        "font-title text-4xl font-medium uppercase text-rv-highlight md:text-5xl",
+        "font-title text-4xl font-medium uppercase text-rv-text md:text-5xl",
         className
       )}
       {...props}
@@ -46,7 +46,7 @@ export function SectionTitle({
   return (
     <h2
       className={cn(
-        "font-title text-2xl font-medium uppercase text-rv-highlight md:text-3xl",
+        "font-title text-2xl font-medium uppercase text-rv-text md:text-3xl",
         className
       )}
       {...props}
@@ -63,7 +63,7 @@ export function Subtitle({
   return (
     <p
       className={cn(
-        "font-title text-xl font-light uppercase tracking-[0.02em] text-rv-accent",
+        "font-title text-xl font-light uppercase text-rv-text-muted",
         className
       )}
       {...props}

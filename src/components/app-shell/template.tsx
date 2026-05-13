@@ -20,6 +20,13 @@ type AppShellProps = {
 
 export async function AppShell({ children, title, actions }: AppShellProps) {
   const session = await getServerSession(authOptions);
+  const initials =
+    session?.user.name
+      ?.split(" ")
+      .map((part) => part[0])
+      .join("")
+      .slice(0, 2)
+      .toUpperCase() || "RV";
   const visibleNavItems =
     session?.user.role === "Admin"
       ? [...navItems, { href: "/admin/users", label: "Users" }]
@@ -30,15 +37,19 @@ export async function AppShell({ children, title, actions }: AppShellProps) {
       <header className={styles.header}>
         <div className={styles.headerInner}>
           <Link className={styles.brand} href="/dashboard">
-            RoleVector
+            <span className={styles.brandMark}>RV</span>
+            <span>RoleVector</span>
           </Link>
-          <nav className={styles.nav}>
-            {visibleNavItems.map((item) => (
-              <Link className={styles.navLink} href={item.href} key={item.href}>
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <div className={styles.headerActions}>
+            <nav className={styles.nav}>
+              {visibleNavItems.map((item) => (
+                <Link className={styles.navLink} href={item.href} key={item.href}>
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+            <span className={styles.avatar}>{initials}</span>
+          </div>
         </div>
       </header>
       <section className={styles.content}>

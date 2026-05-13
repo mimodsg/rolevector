@@ -7,7 +7,7 @@ import type {
 import { cn } from "@/lib/utils";
 
 const control =
-  "min-h-11 w-full rounded-rvmd border border-rv-border bg-rv-bg px-3.5 py-3 text-sm font-normal text-rv-text outline-none transition placeholder:text-rv-text-muted/70 focus:border-rv-highlight focus:ring-2 focus:ring-rv-highlight-soft";
+  "min-h-11 w-full rounded-rvmd border border-rv-border bg-rv-bg px-3.5 py-3 text-sm font-normal text-rv-text outline-none transition placeholder:text-rv-text-muted focus:border-rv-primary focus:ring-2 focus:ring-rv-primary-soft";
 
 export function Field({
   children,
@@ -23,7 +23,7 @@ export function Field({
   className?: string;
 }) {
   return (
-    <label className={cn("grid gap-2 text-sm font-bold text-rv-text-soft", className)} htmlFor={htmlFor}>
+    <label className={cn("grid gap-2 text-xs font-bold uppercase text-rv-text-soft", className)} htmlFor={htmlFor}>
       {label}
       {children}
       {helper ? <span className="text-xs font-normal text-rv-text-muted">{helper}</span> : null}

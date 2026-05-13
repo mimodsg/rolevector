@@ -15,7 +15,7 @@ export function Panel({
   return (
     <Component
       className={cn(
-        "rounded-rvlg border border-rv-border bg-[linear-gradient(145deg,var(--color-surface),#393535)] p-5 shadow-rvsm",
+        "rounded-rvlg border border-rv-border bg-[linear-gradient(145deg,var(--color-surface),rgba(30,41,59,0.72))] p-5 shadow-rvsm",
         elevated && "shadow-rvmd",
         className
       )}

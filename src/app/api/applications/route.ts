@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createApplicationSchema } from "@/lib/schemas/application";
 import { assertSameOrigin } from "@/lib/server/request";
 import { requireCurrentUserId } from "@/lib/server/session";
+import { buildApplicationAnalysisSnapshot } from "@/lib/services/application-analysis";
 import { assessApplicationFit } from "@/lib/services/application-fit";
 import { extractApplicationContext } from "@/lib/services/application-context";
 import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
@@ -86,9 +87,19 @@ export async function POST(request: Request) {
       companyUrl,
       jobApplicationUrl
     });
-    const baselineScore = scoreAtsCompatibility(masterCv, parsedJob).overall;
+    const atsBreakdown = scoreAtsCompatibility(masterCv, parsedJob);
+    const baselineScore = atsBreakdown.overall;
     const fitAssessment = assessApplicationFit({
       applicationContext,
+      masterCv,
+      parsedJob
+    });
+    const analysisSnapshot = buildApplicationAnalysisSnapshot({
+      atsBreakdown,
+      baselineAtsScore: baselineScore,
+      currentAtsScore: baselineScore,
+      fitAssessment,
+      isOptimized: false,
       masterCv,
       parsedJob
     });
@@ -117,6 +128,7 @@ export async function POST(request: Request) {
           template: coverLetterTemplate?.content
         }),
         baselineAtsScore: baselineScore,
+        analysisSnapshot,
         atsScore: baselineScore,
         fitAssessment,
         fitScore: fitAssessment.fitScore

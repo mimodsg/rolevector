@@ -41,7 +41,7 @@ export function DataTableRow({
   return (
     <tr
       className={cn(
-        "border-t border-rv-border transition hover:bg-rv-primary-soft/35",
+        "border-t border-rv-border transition hover:bg-rv-primary-soft",
         className
       )}
       {...props}

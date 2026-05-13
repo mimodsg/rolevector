@@ -151,6 +151,7 @@ model Application {
   atsScore          Float             @map("ats_score")
   fitScore          Float             @default(0) @map("fit_score")
   fitAssessment     Json              @default("{}") @map("fit_assessment")
+  analysisSnapshot  Json              @default("{}") @map("analysis_snapshot")
   optimizedAt       DateTime?         @map("optimized_at")
   status            ApplicationStatus @default(Draft)
   createdAt         DateTime          @default(now()) @map("created_at")

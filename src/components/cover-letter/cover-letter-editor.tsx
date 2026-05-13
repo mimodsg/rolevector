@@ -86,7 +86,7 @@ export function CoverLetterEditor({ initialContent }: { initialContent: string }
 
   return (
     <Panel as="form" onSubmit={saveTemplate}>
-      <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-rv-border bg-rv-surface/95 px-5 pb-4 pt-5 backdrop-blur">
+      <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-rv-border bg-rv-surface px-5 pb-4 pt-5 backdrop-blur">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-2xl md:text-3xl">Cover Letter</SectionTitle>
@@ -115,7 +115,7 @@ export function CoverLetterEditor({ initialContent }: { initialContent: string }
         <HelperText className="mb-3">
           Use bracketed tokens where RoleVector should inject application and Master CV data.
         </HelperText>
-        <div className="mb-5 rounded-rvmd border border-rv-border bg-rv-bg/40 p-4">
+        <div className="mb-5 rounded-rvmd border border-rv-border bg-rv-bg p-4">
           <button
             className="flex w-full flex-wrap items-center justify-between gap-3 text-left"
             onClick={() => setIsTokenLegendOpen((current) => !current)}

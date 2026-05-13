@@ -392,7 +392,7 @@ export function MasterCvEditor({
 
   return (
     <Panel as="form" onSubmit={saveMasterCv}>
-      <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-rv-border bg-rv-surface/95 px-5 pb-4 pt-5 backdrop-blur">
+      <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-rv-border bg-rv-surface px-5 pb-4 pt-5 backdrop-blur">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <SectionTitle className="text-2xl md:text-3xl">Profile source</SectionTitle>
@@ -422,7 +422,7 @@ export function MasterCvEditor({
         ) : null}
       </div>
 
-      <section className="mt-6 rounded-rvmd border border-rv-border bg-rv-bg/40 p-4">
+      <section className="mt-6 rounded-rvmd border border-rv-border bg-rv-bg p-4">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <h3 className="font-title text-lg uppercase text-rv-highlight">Import CV</h3>
@@ -720,7 +720,7 @@ function WorkExperienceCard({
   skillOptions: SkillOptions;
 }) {
   return (
-    <Panel className="bg-rv-bg/40">
+    <Panel className="bg-rv-bg">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button
           className="text-left"
@@ -918,7 +918,7 @@ function ProjectCard({
   onToggle: () => void;
 }) {
   return (
-    <Panel className="bg-rv-bg/40">
+    <Panel className="bg-rv-bg">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <button className="text-left" onClick={onToggle} type="button">
           <h3 className="font-title text-lg uppercase text-rv-highlight">
@@ -984,7 +984,7 @@ function EducationCard({
   onRemove: () => void;
 }) {
   return (
-    <Panel className="bg-rv-bg/40">
+    <Panel className="bg-rv-bg">
       <CardHeader index={index} onRemove={onRemove} title="Education" />
       <div className="mt-4 grid items-start gap-4 md:grid-cols-2">
         <Field label="Institution">

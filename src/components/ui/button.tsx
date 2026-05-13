@@ -6,13 +6,13 @@ type ButtonVariant = "primary" | "secondary" | "highlight" | "ghost";
 
 const variants: Record<ButtonVariant, string> = {
   primary: "border-transparent bg-rv-primary text-rv-text hover:bg-rv-primary-dark",
-  secondary: "border-transparent bg-rv-accent text-rv-bg hover:bg-rv-highlight",
-  highlight: "border-transparent bg-rv-highlight text-rv-bg hover:bg-rv-accent",
-  ghost: "border-rv-border bg-transparent text-rv-text hover:bg-rv-primary-soft"
+  secondary: "border-rv-border bg-rv-surface-alt text-rv-text hover:border-rv-primary hover:bg-rv-primary-soft",
+  highlight: "border-transparent bg-rv-accent text-rv-bg hover:bg-rv-highlight",
+  ghost: "border-rv-border bg-transparent text-rv-text-soft hover:border-rv-primary hover:bg-rv-primary-soft hover:text-rv-text"
 };
 
 const base =
-  "inline-flex min-h-11 items-center justify-center rounded-rvmd border px-4 py-2.5 text-sm font-bold no-underline transition focus:outline-none focus:ring-2 focus:ring-rv-highlight-soft disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex min-h-11 items-center justify-center rounded-rvmd border px-4 py-2.5 text-sm font-bold no-underline shadow-rvsm transition focus:outline-none focus:ring-2 focus:ring-rv-primary-soft disabled:cursor-not-allowed disabled:opacity-60";
 
 export function Button({
   className,

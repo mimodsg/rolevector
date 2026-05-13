@@ -11,15 +11,15 @@ export function Tag({
   tone?: TagTone;
 }) {
   const toneClass = {
-    neutral: "bg-rv-primary-soft text-rv-text-soft",
-    admin: "bg-rv-highlight-soft text-rv-highlight",
-    authenticated: "bg-rv-accent-soft text-rv-accent"
+    neutral: "bg-rv-primary-soft text-rv-primary-dark",
+    admin: "bg-rv-accent-soft text-rv-accent",
+    authenticated: "bg-rv-highlight-soft text-rv-highlight"
   }[tone];
 
   return (
     <span
       className={cn(
-        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold",
+        "inline-flex items-center rounded-rvsm border border-current/20 px-2.5 py-1 text-xs font-bold",
         toneClass,
         className
       )}
@@ -50,15 +50,12 @@ export function Alert({
   tone?: "success" | "warning" | "error";
 }) {
   const toneClass = {
-    success: "bg-rv-highlight-soft text-rv-highlight",
-    warning: "bg-rv-accent-soft text-rv-accent",
+    success: "bg-rv-accent-soft text-rv-accent",
+    warning: "bg-rv-warning-soft text-rv-warning",
     error: "bg-rv-error-soft text-rv-error"
   }[tone];
 
   return (
-    <div
-      className={cn("rounded-rvmd p-4 text-sm", toneClass, className)}
-      {...props}
-    />
+    <div className={cn("rounded-rvmd border border-current/25 p-4 text-sm", toneClass, className)} {...props} />
   );
 }

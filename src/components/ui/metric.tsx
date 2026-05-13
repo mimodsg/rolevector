@@ -9,7 +9,7 @@ export function Metric({
 }) {
   return (
     <div className="rounded-rvmd border border-rv-border bg-rv-bg p-4">
-      <span className="block font-title text-4xl font-medium leading-none text-rv-highlight">
+      <span className="block font-title text-4xl font-medium leading-none text-rv-text">
         {value}
       </span>
       <span className="text-xs font-bold text-rv-text-muted">{label}</span>
