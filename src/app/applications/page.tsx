@@ -36,6 +36,7 @@ export default async function ApplicationsPage() {
               <th className="px-4 py-3 font-semibold">Position</th>
               <th className="px-4 py-3 font-semibold">Company</th>
               <th className="px-4 py-3 font-semibold">Salary</th>
+              <th className="px-4 py-3 font-semibold">Fit</th>
               <th className="px-4 py-3 font-semibold">Score</th>
               <th className="px-4 py-3 font-semibold">Date</th>
               <th className="px-4 py-3 font-semibold">Status</th>
@@ -45,7 +46,7 @@ export default async function ApplicationsPage() {
           <tbody>
             {applications.length === 0 ? (
               <tr>
-                <td className="px-4 py-5 text-rv-text-muted" colSpan={7}>
+                <td className="px-4 py-5 text-rv-text-muted" colSpan={8}>
                   No generated applications yet.
                 </td>
               </tr>
@@ -60,6 +61,9 @@ export default async function ApplicationsPage() {
                   </td>
                   <td className="px-4 py-3 text-rv-text-muted">
                     {application.salary || "-"}
+                  </td>
+                  <td className="px-4 py-3 text-rv-text-muted">
+                    {application.fitScore ? application.fitScore.toFixed(1) : "-"}
                   </td>
                   <td className="px-4 py-3 text-rv-text-muted">
                     {application.atsScore.toFixed(1)}

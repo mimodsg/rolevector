@@ -45,6 +45,37 @@ function contextInsights(context: string) {
     .slice(0, 6);
 }
 
+function fitAssessment(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const assessment = value as {
+    gaps?: unknown;
+    recommendation?: unknown;
+    riskFlags?: unknown;
+    strongMatches?: unknown;
+    summary?: unknown;
+  };
+
+  return {
+    gaps: stringList(assessment.gaps),
+    recommendation:
+      typeof assessment.recommendation === "string"
+        ? assessment.recommendation
+        : "Not assessed",
+    riskFlags: stringList(assessment.riskFlags),
+    strongMatches: stringList(assessment.strongMatches),
+    summary: typeof assessment.summary === "string" ? assessment.summary : ""
+  };
+}
+
+function stringList(value: unknown) {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
 export default async function ApplicationPreviewPage({
   params
 }: {
@@ -67,6 +98,7 @@ export default async function ApplicationPreviewPage({
     (application.atsScore - application.baselineAtsScore).toFixed(1)
   );
   const isOptimized = Boolean(application.optimizedAt);
+  const fit = fitAssessment(application.fitAssessment);
   const companyInsights = contextInsights(application.companyContext);
   const jobPageInsights = contextInsights(application.jobContext);
   const hasAiTailoringContext =
@@ -146,6 +178,60 @@ export default async function ApplicationPreviewPage({
         </div>
 
         <aside className="grid content-start gap-6">
+          <Panel>
+            <h2 className="font-title text-xl uppercase text-rv-text">Apply Fit</h2>
+            <div className="mt-4 flex items-baseline gap-3">
+              <span className="font-title text-4xl text-rv-highlight">
+                {application.fitScore ? application.fitScore.toFixed(1) : "-"}
+              </span>
+              <span className="text-sm font-bold text-rv-text-soft">
+                {fit?.recommendation ?? "Not assessed"}
+              </span>
+            </div>
+            {fit?.summary ? (
+              <p className="mt-3 text-sm leading-6 text-rv-text-muted">{fit.summary}</p>
+            ) : null}
+            {fit ? (
+              <div className="mt-5 grid gap-4 text-sm">
+                <div>
+                  <h3 className="font-bold text-rv-text-soft">Strong matches</h3>
+                  {fit.strongMatches.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                      {fit.strongMatches.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-rv-text-muted">No strong matches identified.</p>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-rv-text-soft">Gaps to review</h3>
+                  {fit.gaps.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                      {fit.gaps.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-rv-text-muted">No major gaps identified.</p>
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-bold text-rv-text-soft">Risk flags</h3>
+                  {fit.riskFlags.length > 0 ? (
+                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                      {fit.riskFlags.map((item) => (
+                        <li key={item}>{item}</li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-rv-text-muted">No major risk flags identified.</p>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </Panel>
           <ScoreCard
             score={application.atsScore.toFixed(1)}
             summary={

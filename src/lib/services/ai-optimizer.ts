@@ -92,6 +92,10 @@ const aiMasterCvSchema = z.object({
   })
 });
 
+const aiCoverLetterSchema = z.object({
+  cover_letter: z.string()
+});
+
 export type OptimizationResult = {
   optimizedCvJson: MasterCv;
   coverLetterText: string;
@@ -229,19 +233,28 @@ async function optimizeWithOpenAI({
     source: masterCv
   });
   const score = scoreAtsCompatibility(optimizedCvJson, parsedJob);
-  const coverLetterText = generateCoverLetter({
+  const draftCoverLetter = generateCoverLetter({
     applicationContext,
     masterCv: optimizedCvJson,
     parsedJob,
     template: coverLetterTemplate
   });
+  const optimizedCoverLetter = await optimizeCoverLetterWithOpenAI({
+    applicationContextText: contextText,
+    draftCoverLetter,
+    jobDetails,
+    jobProfile,
+    masterCv: optimizedCvJson,
+    parsedJob
+  });
 
   return {
     optimizedCvJson,
-    coverLetterText,
+    coverLetterText: optimizedCoverLetter.coverLetterText,
     atsScore: score.overall,
     metadata: {
-      inputTokens: response.usage?.input_tokens ?? 0,
+      inputTokens:
+        (response.usage?.input_tokens ?? 0) + optimizedCoverLetter.inputTokens,
       model: env.OPENAI_MODEL,
       mode: "openai",
       notes: [
@@ -250,14 +263,88 @@ async function optimizeWithOpenAI({
         "Output was validated against the Master CV application schema before saving.",
         "Immutable source facts were restored from the DB-backed Master CV before persistence.",
         `Derived ${jobProfile.emphasizedTerms.length} emphasized terms from the job details.`,
+        "Cover letter was rewritten against the optimized CV, raw job details, and company context.",
         ...(contextText
           ? ["Company and job page context was included as secondary optimization context."]
           : [])
       ],
-      outputTokens: response.usage?.output_tokens ?? 0,
-      totalTokens: response.usage?.total_tokens ?? 0
+      outputTokens:
+        (response.usage?.output_tokens ?? 0) + optimizedCoverLetter.outputTokens,
+      totalTokens:
+        (response.usage?.total_tokens ?? 0) + optimizedCoverLetter.totalTokens
     }
   };
+}
+
+async function optimizeCoverLetterWithOpenAI({
+  applicationContextText,
+  draftCoverLetter,
+  jobDetails,
+  jobProfile,
+  masterCv,
+  parsedJob
+}: {
+  applicationContextText: string;
+  draftCoverLetter: string;
+  jobDetails?: string;
+  jobProfile: JobProfile;
+  masterCv: MasterCv;
+  parsedJob: ParsedJob;
+}) {
+  try {
+    const response = await openai!.responses.parse({
+      input: [
+        {
+          role: "developer",
+          content: [
+            "Rewrite the supplied cover letter draft for this exact application.",
+            "Use only verified facts from the optimized CV, raw job details, and company context.",
+            "Keep the applicant's contact details and factual background intact.",
+            "Preserve the template's general structure and voice, but tailor the emphasis to the role and company.",
+            "Preserve text-only formatting from the draft: salutation, paragraph breaks, blank lines, bullet/list blocks, and signature.",
+            "If the draft has a project list or bullet list, keep it as a separate list block instead of merging it into a paragraph.",
+            "Use newline characters for paragraph spacing. Do not return Markdown fences, HTML, tables, or rich-text markup.",
+            "Mention company context only when it provides a specific, useful reason for interest.",
+            "Use natural senior-level professional prose, not keyword stuffing or AI-sounding filler.",
+            "Do not invent projects, metrics, employers, qualifications, certifications, citizenship, clearance, location, or availability.",
+            "Return only the final cover letter text."
+          ].join("\n")
+        },
+        {
+          role: "user",
+          content: JSON.stringify({
+            application_context: applicationContextText,
+            cover_letter_draft: draftCoverLetter,
+            job: parsedJob,
+            job_profile: jobProfile,
+            optimized_cv_text: coverLetterCvContext(masterCv),
+            raw_job_details: jobDetails ?? ""
+          })
+        }
+      ],
+      max_output_tokens: 3000,
+      model: env.OPENAI_MODEL,
+      text: {
+        format: zodTextFormat(aiCoverLetterSchema, "optimized_cover_letter")
+      }
+    });
+
+    return {
+      coverLetterText: formatCoverLetterText(
+        response.output_parsed?.cover_letter ?? draftCoverLetter
+      ),
+      inputTokens: response.usage?.input_tokens ?? 0,
+      outputTokens: response.usage?.output_tokens ?? 0,
+      totalTokens: response.usage?.total_tokens ?? 0
+    };
+  } catch {
+    return {
+      coverLetterText: formatCoverLetterText(draftCoverLetter),
+      inputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0
+    };
+  }
 }
 
 function optimizeDeterministically({
@@ -444,6 +531,41 @@ function applyGenericEnhancements(masterCv: MasterCv, jobProfile: JobProfile) {
   });
 }
 
+function coverLetterCvContext(masterCv: MasterCv) {
+  return [
+    masterCv.basics.full_name,
+    masterCv.basics.title,
+    masterCv.summary,
+    masterCv.hard_skills.length ? `Hard skills: ${masterCv.hard_skills.join(", ")}` : "",
+    masterCv.technical_skills.languages.length
+      ? `Programming languages: ${masterCv.technical_skills.languages.join(", ")}`
+      : "",
+    masterCv.technical_skills.frameworks.length
+      ? `Frameworks: ${masterCv.technical_skills.frameworks.join(", ")}`
+      : "",
+    masterCv.technical_skills.cms.length
+      ? `CMS / platforms: ${masterCv.technical_skills.cms.join(", ")}`
+      : "",
+    masterCv.projects.length
+      ? `Projects: ${masterCv.projects
+          .map((project) =>
+            [project.title, project.client, project.description].filter(Boolean).join(" - ")
+          )
+          .join("\n")}`
+      : "",
+    masterCv.work_experience.length
+      ? `Recent experience: ${masterCv.work_experience
+          .slice(0, 5)
+          .map((item) =>
+            [item.title, item.company, item.description].filter(Boolean).join(" - ")
+          )
+          .join("\n")}`
+      : ""
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+}
+
 function applyEarlyCareerGrouping({
   optimized,
   source
@@ -589,6 +711,22 @@ function polishResumeProse(value: string) {
     .replace(/\bresults-driven\b/gi, "delivery-focused")
     .replace(/\s{2,}/g, " ")
     .replace(/ ?\n ?/g, "\n")
+    .trim();
+}
+
+function formatCoverLetterText(value: string) {
+  return polishResumeProse(value)
+    .replace(/\r\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/(Dear [^\n,]+,)\s+/g, "$1\n\n")
+    .replace(/(:)\s+-\s+/g, "$1\n\n- ")
+    .replace(/\s+(-\s+[A-Z0-9])/g, "\n$1")
+    .replace(
+      /\s+(Over the years,|More recently,|These experiences|I(?:'|’)m fluent|I am fluent|You can reach me|Thank you for your time|Regards,|Sincerely,)/g,
+      "\n\n$1"
+    )
+    .replace(/(\n-\s[^\n]+)\s+(-\s)/g, "$1\n$2")
+    .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
 

@@ -125,21 +125,82 @@ function renderTechnicalSkillGroups(cv: MasterCv) {
 }
 
 export function renderCoverLetterHtml(coverLetter: string) {
+  const content = renderCoverLetterBlocks(coverLetter);
+
   return `
     <!doctype html>
     <html>
       <head>
         <meta charset="utf-8" />
         <style>
-          body { color: #111827; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.55; margin: 32px; white-space: pre-wrap; }
-          p { margin: 0; }
+          body { color: #111827; font-family: Arial, sans-serif; font-size: 12px; line-height: 1.55; margin: 32px; }
+          p { margin: 0 0 12px; }
+          ul { margin: 0 0 12px 18px; padding: 0; }
+          li { margin: 0 0 4px; }
         </style>
       </head>
       <body>
-        <p>${escapeHtml(coverLetter)}</p>
+        ${content}
       </body>
     </html>
   `;
+}
+
+function renderCoverLetterBlocks(coverLetter: string) {
+  const normalized = normalizeCoverLetterText(coverLetter);
+  const blocks: string[] = [];
+  let listItems: string[] = [];
+
+  function flushList() {
+    if (listItems.length === 0) {
+      return;
+    }
+
+    blocks.push(`<ul>${listItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`);
+    listItems = [];
+  }
+
+  for (const block of normalized.split(/\n{2,}/).map((item) => item.trim()).filter(Boolean)) {
+    const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+    const paragraphLines = [];
+
+    for (const line of lines) {
+      if (/^-\s+/.test(line)) {
+        if (paragraphLines.length > 0) {
+          blocks.push(`<p>${escapeHtml(paragraphLines.join(" "))}</p>`);
+          paragraphLines.length = 0;
+        }
+
+        listItems.push(line.replace(/^-\s+/, ""));
+      } else {
+        flushList();
+        paragraphLines.push(line);
+      }
+    }
+
+    if (paragraphLines.length > 0) {
+      blocks.push(`<p>${escapeHtml(paragraphLines.join(" "))}</p>`);
+    }
+  }
+
+  flushList();
+
+  return blocks.join("");
+}
+
+function normalizeCoverLetterText(value: string) {
+  return value
+    .replace(/\r\n/g, "\n")
+    .replace(/(Dear [^\n,]+,)\s+/g, "$1\n\n")
+    .replace(/(:)\s+-\s+/g, "$1\n\n- ")
+    .replace(/\s+(-\s+[A-Z0-9])/g, "\n$1")
+    .replace(
+      /\s+(Over the years,|More recently,|These experiences|I(?:'|’)m fluent|I am fluent|You can reach me|Thank you for your time|Regards,|Sincerely,)/g,
+      "\n\n$1"
+    )
+    .replace(/(\n-\s[^\n]+)\s+(-\s)/g, "$1\n$2")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 export async function renderPdfBuffer(html: string) {

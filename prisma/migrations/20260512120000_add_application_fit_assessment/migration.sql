@@ -1,0 +1,3 @@
+ALTER TABLE "applications"
+ADD COLUMN "fit_score" DOUBLE PRECISION NOT NULL DEFAULT 0,
+ADD COLUMN "fit_assessment" JSONB NOT NULL DEFAULT '{}'::jsonb;

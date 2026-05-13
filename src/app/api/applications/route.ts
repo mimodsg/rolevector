@@ -6,6 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { createApplicationSchema } from "@/lib/schemas/application";
 import { assertSameOrigin } from "@/lib/server/request";
 import { requireCurrentUserId } from "@/lib/server/session";
+import { assessApplicationFit } from "@/lib/services/application-fit";
 import { extractApplicationContext } from "@/lib/services/application-context";
 import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
 import { generateCoverLetter } from "@/lib/services/cover-letter-generator";
@@ -86,6 +87,11 @@ export async function POST(request: Request) {
       jobApplicationUrl
     });
     const baselineScore = scoreAtsCompatibility(masterCv, parsedJob).overall;
+    const fitAssessment = assessApplicationFit({
+      applicationContext,
+      masterCv,
+      parsedJob
+    });
     const coverLetterTemplate = await prisma.coverLetterTemplate.findUnique({
       where: { userId }
     });
@@ -111,7 +117,9 @@ export async function POST(request: Request) {
           template: coverLetterTemplate?.content
         }),
         baselineAtsScore: baselineScore,
-        atsScore: baselineScore
+        atsScore: baselineScore,
+        fitAssessment,
+        fitScore: fitAssessment.fitScore
       }
     });
 

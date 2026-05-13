@@ -149,6 +149,8 @@ model Application {
   coverLetterText   String            @map("cover_letter_text")
   baselineAtsScore  Float             @default(0) @map("baseline_ats_score")
   atsScore          Float             @map("ats_score")
+  fitScore          Float             @default(0) @map("fit_score")
+  fitAssessment     Json              @default("{}") @map("fit_assessment")
   optimizedAt       DateTime?         @map("optimized_at")
   status            ApplicationStatus @default(Draft)
   createdAt         DateTime          @default(now()) @map("created_at")
