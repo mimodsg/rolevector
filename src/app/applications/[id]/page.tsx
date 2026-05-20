@@ -1,5 +1,9 @@
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import {
+  ApplicationDecisionFlag,
+  applicationDecisionFromFit
+} from "@/components/applications/application-decision-flag";
 import { ApplicationStatusSelect } from "@/components/applications/application-status-select";
 import { OptimizeApplicationButton } from "@/components/applications/optimize-application-button";
 import { RegenerateApplicationButton } from "@/components/applications/regenerate-application-button";
@@ -52,6 +56,8 @@ function fitAssessment(value: unknown) {
 
   const assessment = value as {
     gaps?: unknown;
+    decision?: unknown;
+    decisionTone?: unknown;
     recommendation?: unknown;
     riskFlags?: unknown;
     strongMatches?: unknown;
@@ -59,6 +65,18 @@ function fitAssessment(value: unknown) {
   };
 
   return {
+    decision:
+      assessment.decision === "Ready to submit" ||
+      assessment.decision === "Worth optimizing" ||
+      assessment.decision === "Explore another opportunity"
+        ? assessment.decision
+        : "",
+    decisionTone:
+      assessment.decisionTone === "success" ||
+      assessment.decisionTone === "warning" ||
+      assessment.decisionTone === "danger"
+        ? assessment.decisionTone
+        : "",
     gaps: stringList(assessment.gaps),
     recommendation:
       typeof assessment.recommendation === "string"
@@ -99,6 +117,10 @@ export default async function ApplicationPreviewPage({
   );
   const isOptimized = Boolean(application.optimizedAt);
   const fit = fitAssessment(application.fitAssessment);
+  const decision = applicationDecisionFromFit({
+    fitAssessment: application.fitAssessment,
+    fitScore: application.fitScore
+  });
   const companyInsights = contextInsights(application.companyContext);
   const jobPageInsights = contextInsights(application.jobContext);
   const hasAiTailoringContext =
@@ -122,8 +144,8 @@ export default async function ApplicationPreviewPage({
       }
       title="Application Preview"
     >
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
-        <div className="grid gap-6">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
+        <div className="grid min-w-0 gap-6">
           <Panel>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -177,9 +199,24 @@ export default async function ApplicationPreviewPage({
           </Panel>
         </div>
 
-        <aside className="grid content-start gap-6">
-          <Panel>
+        <aside className="grid min-w-0 max-w-full content-start gap-6 overflow-hidden">
+          <Panel className="min-w-0 overflow-hidden">
             <h2 className="font-title text-xl uppercase text-rv-text">Apply Fit</h2>
+            <div className="mt-4 rounded-rvmd border border-rv-border bg-rv-bg p-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-rv-text-muted">
+                Application decision
+              </p>
+              <div className="mt-3">
+                <ApplicationDecisionFlag {...decision} />
+              </div>
+              <p className="mt-3 break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
+                {decision.decision === "Ready to submit"
+                  ? "This role has strong alignment and no major risk flags. The application is worth submitting after your final review."
+                  : decision.decision === "Worth optimizing"
+                    ? "This role has enough alignment to justify tailoring the CV and cover letter before applying."
+                    : "This role has low alignment or meaningful risk flags. It is likely better to prioritize another opportunity."}
+              </p>
+            </div>
             <div className="mt-4 flex items-baseline gap-3">
               <span className="font-title text-4xl text-rv-highlight">
                 {application.fitScore ? application.fitScore.toFixed(1) : "-"}
@@ -189,14 +226,14 @@ export default async function ApplicationPreviewPage({
               </span>
             </div>
             {fit?.summary ? (
-              <p className="mt-3 text-sm leading-6 text-rv-text-muted">{fit.summary}</p>
+              <p className="mt-3 break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">{fit.summary}</p>
             ) : null}
             {fit ? (
               <div className="mt-5 grid gap-4 text-sm">
                 <div>
                   <h3 className="font-bold text-rv-text-soft">Strong matches</h3>
                   {fit.strongMatches.length > 0 ? (
-                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                    <ul className="mt-2 list-disc space-y-2 break-words pl-5 leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
                       {fit.strongMatches.map((item) => (
                         <li key={item}>{item}</li>
                       ))}
@@ -208,7 +245,7 @@ export default async function ApplicationPreviewPage({
                 <div>
                   <h3 className="font-bold text-rv-text-soft">Gaps to review</h3>
                   {fit.gaps.length > 0 ? (
-                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                    <ul className="mt-2 list-disc space-y-2 break-words pl-5 leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
                       {fit.gaps.map((item) => (
                         <li key={item}>{item}</li>
                       ))}
@@ -220,7 +257,7 @@ export default async function ApplicationPreviewPage({
                 <div>
                   <h3 className="font-bold text-rv-text-soft">Risk flags</h3>
                   {fit.riskFlags.length > 0 ? (
-                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                    <ul className="mt-2 list-disc space-y-2 break-words pl-5 leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
                       {fit.riskFlags.map((item) => (
                         <li key={item}>{item}</li>
                       ))}
@@ -240,7 +277,7 @@ export default async function ApplicationPreviewPage({
                 : "Baseline snapshot from your Master CV. Run optimization from this preview."
             }
           />
-          <Panel>
+          <Panel className="min-w-0 overflow-hidden">
             <h2 className="font-title text-xl uppercase text-rv-text">Score Comparison</h2>
             <dl className="mt-4 space-y-4 text-sm">
               <div>
@@ -263,48 +300,40 @@ export default async function ApplicationPreviewPage({
               </div>
             </dl>
           </Panel>
-          <Panel>
+          <Panel className="min-w-0 overflow-hidden">
             <h2 className="font-title text-xl uppercase text-rv-text">
               AI Tailoring Context
             </h2>
             {hasAiTailoringContext ? (
-              <div className="mt-4 grid gap-5 text-sm">
-                <dl className="space-y-3">
+              <div className="mt-4 grid min-w-0 gap-5 text-sm">
+                <div className="flex flex-wrap gap-2">
                   {application.companyUrl ? (
-                    <div>
-                      <dt className="font-bold text-rv-text-soft">Company source</dt>
-                      <dd className="mt-1">
-                        <a
-                          className="break-all text-rv-highlight underline-offset-4 hover:underline"
-                          href={application.companyUrl}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          {application.companyUrl}
-                        </a>
-                      </dd>
-                    </div>
+                    <ButtonLink
+                      className="min-h-9 px-3 py-1.5 text-xs"
+                      href={application.companyUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                      variant="ghost"
+                    >
+                      View company page
+                    </ButtonLink>
                   ) : null}
                   {application.jobApplicationUrl ? (
-                    <div>
-                      <dt className="font-bold text-rv-text-soft">Job source</dt>
-                      <dd className="mt-1">
-                        <a
-                          className="break-all text-rv-highlight underline-offset-4 hover:underline"
-                          href={application.jobApplicationUrl}
-                          rel="noreferrer"
-                          target="_blank"
-                        >
-                          {application.jobApplicationUrl}
-                        </a>
-                      </dd>
-                    </div>
+                    <ButtonLink
+                      className="min-h-9 px-3 py-1.5 text-xs"
+                      href={application.jobApplicationUrl}
+                      rel="noreferrer"
+                      target="_blank"
+                      variant="ghost"
+                    >
+                      View job post
+                    </ButtonLink>
                   ) : null}
-                </dl>
+                </div>
                 <div>
                   <h3 className="font-bold text-rv-text-soft">Company insights</h3>
                   {companyInsights.length > 0 ? (
-                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                    <ul className="mt-2 list-disc space-y-2 break-words pl-5 leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
                       {companyInsights.map((insight) => (
                         <li key={insight}>{insight}</li>
                       ))}
@@ -318,7 +347,7 @@ export default async function ApplicationPreviewPage({
                 <div>
                   <h3 className="font-bold text-rv-text-soft">Job page insights</h3>
                   {jobPageInsights.length > 0 ? (
-                    <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                    <ul className="mt-2 list-disc space-y-2 break-words pl-5 leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
                       {jobPageInsights.map((insight) => (
                         <li key={insight}>{insight}</li>
                       ))}
@@ -336,43 +365,35 @@ export default async function ApplicationPreviewPage({
               </p>
             )}
           </Panel>
-          <Panel>
+          <Panel className="min-w-0 overflow-hidden">
             <h2 className="font-title text-xl uppercase text-rv-text">Job Details</h2>
             {application.companyUrl || application.jobApplicationUrl ? (
-              <dl className="mt-4 space-y-3 text-sm">
+              <div className="mt-4 flex flex-wrap gap-2">
                 {application.companyUrl ? (
-                  <div>
-                    <dt className="font-bold text-rv-text-soft">Company URL</dt>
-                    <dd className="mt-1">
-                      <a
-                        className="break-all text-rv-highlight underline-offset-4 hover:underline"
-                        href={application.companyUrl}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        {application.companyUrl}
-                      </a>
-                    </dd>
-                  </div>
+                  <ButtonLink
+                    className="min-h-9 px-3 py-1.5 text-xs"
+                    href={application.companyUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                    variant="ghost"
+                  >
+                    View company page
+                  </ButtonLink>
                 ) : null}
                 {application.jobApplicationUrl ? (
-                  <div>
-                    <dt className="font-bold text-rv-text-soft">Job application URL</dt>
-                    <dd className="mt-1">
-                      <a
-                        className="break-all text-rv-highlight underline-offset-4 hover:underline"
-                        href={application.jobApplicationUrl}
-                        rel="noreferrer"
-                        target="_blank"
-                      >
-                        {application.jobApplicationUrl}
-                      </a>
-                    </dd>
-                  </div>
+                  <ButtonLink
+                    className="min-h-9 px-3 py-1.5 text-xs"
+                    href={application.jobApplicationUrl}
+                    rel="noreferrer"
+                    target="_blank"
+                    variant="ghost"
+                  >
+                    View job post
+                  </ButtonLink>
                 ) : null}
-              </dl>
+              </div>
             ) : null}
-            <p className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap text-sm leading-6 text-rv-text-muted">
+            <p className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
               {application.jobDetails}
             </p>
             {application.companyContext || application.jobContext ? (
@@ -380,7 +401,7 @@ export default async function ApplicationPreviewPage({
                 {application.companyContext ? (
                   <div>
                     <h3 className="font-bold text-rv-text-soft">Company context</h3>
-                    <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap leading-6 text-rv-text-muted">
+                    <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
                       {application.companyContext}
                     </p>
                   </div>
@@ -388,7 +409,7 @@ export default async function ApplicationPreviewPage({
                 {application.jobContext ? (
                   <div>
                     <h3 className="font-bold text-rv-text-soft">Job page context</h3>
-                    <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap leading-6 text-rv-text-muted">
+                    <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
                       {application.jobContext}
                     </p>
                   </div>

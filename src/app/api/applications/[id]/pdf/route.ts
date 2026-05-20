@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { applicationDocumentNames } from "@/lib/application-document-names";
 import { prisma } from "@/lib/prisma";
 import { masterCvSchema } from "@/lib/schemas/master-cv";
 import {
@@ -22,28 +23,26 @@ export async function GET(
     return NextResponse.json({ error: "Application not found." }, { status: 404 });
   }
 
-  const baseName = filenameSafe(application.positionTitle ?? "application");
   const cv = masterCvSchema.parse(application.optimizedCvJson);
+  const names = applicationDocumentNames({
+    candidateName: cv.basics.full_name,
+    companyName: application.companyName,
+    positionTitle: application.positionTitle
+  });
   const cvPdf = await renderCvPdfBuffer(cv);
   const coverLetterPdf = await renderCoverLetterPdfBuffer(application.coverLetterText);
   const archive = createZip([
-    { data: Buffer.from(cvPdf), name: `${baseName}-cv.pdf` },
-    { data: Buffer.from(coverLetterPdf), name: `${baseName}-cover-letter.pdf` }
+    { data: Buffer.from(cvPdf), name: `${names.folderName}/${names.cvPdf}` },
+    {
+      data: Buffer.from(coverLetterPdf),
+      name: `${names.folderName}/${names.coverLetterPdf}`
+    }
   ]);
 
   return new Response(archive, {
     headers: {
       "Content-Type": "application/zip",
-      "Content-Disposition": `attachment; filename="${baseName}-documents.zip"`
+      "Content-Disposition": `attachment; filename="${names.zipName}"`
     }
   });
-}
-
-function filenameSafe(value: string) {
-  return (
-    value
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-+|-+$/g, "") || "application"
-  );
 }

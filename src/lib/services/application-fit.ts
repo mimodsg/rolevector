@@ -3,6 +3,8 @@ import type { MasterCv } from "@/lib/schemas/master-cv";
 import type { ApplicationContext } from "./application-context";
 
 export type ApplicationFitAssessment = {
+  decision: "Ready to submit" | "Worth optimizing" | "Explore another opportunity";
+  decisionTone: "success" | "warning" | "danger";
   fitScore: number;
   recommendation: "Strong apply" | "Apply with positioning" | "Stretch" | "Low fit";
   summary: string;
@@ -49,6 +51,7 @@ export function assessApplicationFit({
     10
   );
   const recommendation = recommendationFor(fitScore);
+  const decision = decisionFor(fitScore, riskFlags.length);
   const strongMatches = unique([
     ...matchedRequired,
     ...responsibilityMatches.map((item) => concise(item))
@@ -58,9 +61,17 @@ export function assessApplicationFit({
     .slice(0, 6);
 
   return {
+    decision: decision.decision,
+    decisionTone: decision.decisionTone,
     fitScore: Number(fitScore.toFixed(1)),
     recommendation,
-    summary: summaryFor(recommendation, matchedRequired.length, gaps.length, riskFlags.length),
+    summary: summaryFor(
+      decision.decision,
+      recommendation,
+      matchedRequired.length,
+      gaps.length,
+      riskFlags.length
+    ),
     strongMatches,
     gaps,
     riskFlags
@@ -165,13 +176,38 @@ function recommendationFor(score: number): ApplicationFitAssessment["recommendat
   return "Low fit";
 }
 
+function decisionFor(
+  score: number,
+  riskCount: number
+): Pick<ApplicationFitAssessment, "decision" | "decisionTone"> {
+  if (score >= 8 && riskCount === 0) {
+    return {
+      decision: "Ready to submit",
+      decisionTone: "success"
+    };
+  }
+
+  if (score >= 6.5 && riskCount <= 1) {
+    return {
+      decision: "Worth optimizing",
+      decisionTone: "warning"
+    };
+  }
+
+  return {
+    decision: "Explore another opportunity",
+    decisionTone: "danger"
+  };
+}
+
 function summaryFor(
+  decision: ApplicationFitAssessment["decision"],
   recommendation: ApplicationFitAssessment["recommendation"],
   matchCount: number,
   gapCount: number,
   riskCount: number
 ) {
-  return `${recommendation}: ${matchCount} relevant signals matched, ${gapCount} notable gaps found, and ${riskCount} risk flags detected.`;
+  return `${decision}: ${recommendation.toLowerCase()} with ${matchCount} relevant signals matched, ${gapCount} notable gaps found, and ${riskCount} risk flags detected.`;
 }
 
 function hasTermOverlap(term: string, cvTerms: Set<string>) {

@@ -5,6 +5,7 @@ export const applicationStatusSchema = z.enum([
   "Draft",
   "Applied",
   "Interviewing",
+  "Dropped",
   "Rejected",
   "Offer"
 ]);

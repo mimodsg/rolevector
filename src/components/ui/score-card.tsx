@@ -16,13 +16,13 @@ export function ScoreCard({
         <h3 className="font-title text-xl uppercase text-rv-text">{label}</h3>
         <HelperText>Sample score component for job fit analysis.</HelperText>
       </div>
-      <div className="flex items-center gap-4">
+      <div className="flex min-w-0 items-center gap-4">
         <div className="grid aspect-square h-[88px] place-items-center rounded-full border-8 border-rv-accent font-title text-3xl font-medium text-rv-highlight">
           {score}
         </div>
-        <div>
+        <div className="min-w-0">
           <strong className="text-rv-text">Strong Match</strong>
-          <HelperText>{summary}</HelperText>
+          <HelperText className="break-words [overflow-wrap:anywhere]">{summary}</HelperText>
         </div>
       </div>
       <div className="h-2.5 overflow-hidden rounded-full bg-rv-bg">

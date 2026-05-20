@@ -1,4 +1,8 @@
 import { AppShell } from "@/components/app-shell";
+import {
+  ApplicationDecisionFlag,
+  applicationDecisionFromFit
+} from "@/components/applications/application-decision-flag";
 import { StatusPill } from "@/components/status-pill";
 import { ButtonLink } from "@/components/ui/button";
 import { Panel } from "@/components/ui/panel";
@@ -36,6 +40,7 @@ export default async function ApplicationsPage() {
               <th className="px-4 py-3 font-semibold">Position</th>
               <th className="px-4 py-3 font-semibold">Company</th>
               <th className="px-4 py-3 font-semibold">Salary</th>
+              <th className="px-4 py-3 font-semibold">Decision</th>
               <th className="px-4 py-3 font-semibold">Fit</th>
               <th className="px-4 py-3 font-semibold">Score</th>
               <th className="px-4 py-3 font-semibold">Date</th>
@@ -46,46 +51,56 @@ export default async function ApplicationsPage() {
           <tbody>
             {applications.length === 0 ? (
               <tr>
-                <td className="px-4 py-5 text-rv-text-muted" colSpan={8}>
+                <td className="px-4 py-5 text-rv-text-muted" colSpan={9}>
                   No generated applications yet.
                 </td>
               </tr>
             ) : (
-              applications.map((application) => (
-                <tr className="border-t border-rv-border" key={application.id}>
-                  <td className="px-4 py-3 text-rv-text">
-                    {application.positionTitle ?? "Untitled position"}
-                  </td>
-                  <td className="px-4 py-3 text-rv-text-muted">
-                    {application.companyName ?? "Unknown company"}
-                  </td>
-                  <td className="px-4 py-3 text-rv-text-muted">
-                    {application.salary || "-"}
-                  </td>
-                  <td className="px-4 py-3 text-rv-text-muted">
-                    {application.fitScore ? application.fitScore.toFixed(1) : "-"}
-                  </td>
-                  <td className="px-4 py-3 text-rv-text-muted">
-                    {application.atsScore.toFixed(1)}
-                  </td>
-                  <td className="px-4 py-3 text-rv-text-muted">
-                    {formatDate(application.createdAt)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <StatusPill status={application.status} />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex flex-wrap gap-2">
-                      <ButtonLink href={`/applications/${application.id}`} variant="ghost">
-                        Preview
-                      </ButtonLink>
-                      <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="ghost">
-                        Download PDFs
-                      </ButtonLink>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              applications.map((application) => {
+                const decision = applicationDecisionFromFit({
+                  fitAssessment: application.fitAssessment,
+                  fitScore: application.fitScore
+                });
+
+                return (
+                  <tr className="border-t border-rv-border" key={application.id}>
+                    <td className="px-4 py-3 text-rv-text">
+                      {application.positionTitle ?? "Untitled position"}
+                    </td>
+                    <td className="px-4 py-3 text-rv-text-muted">
+                      {application.companyName ?? "Unknown company"}
+                    </td>
+                    <td className="px-4 py-3 text-rv-text-muted">
+                      {application.salary || "-"}
+                    </td>
+                    <td className="px-4 py-3">
+                      <ApplicationDecisionFlag {...decision} />
+                    </td>
+                    <td className="px-4 py-3 text-rv-text-muted">
+                      {application.fitScore ? application.fitScore.toFixed(1) : "-"}
+                    </td>
+                    <td className="px-4 py-3 text-rv-text-muted">
+                      {application.atsScore.toFixed(1)}
+                    </td>
+                    <td className="px-4 py-3 text-rv-text-muted">
+                      {formatDate(application.createdAt)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <StatusPill status={application.status} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-2">
+                        <ButtonLink href={`/applications/${application.id}`} variant="ghost">
+                          Preview
+                        </ButtonLink>
+                        <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="ghost">
+                          Download PDFs
+                        </ButtonLink>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

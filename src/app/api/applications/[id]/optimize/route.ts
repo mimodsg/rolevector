@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { parsedJobSchema } from "@/lib/schemas/job";
 import { assertSameOrigin } from "@/lib/server/request";
 import { requireCurrentUserId } from "@/lib/server/session";
+import { assessApplicationFit } from "@/lib/services/application-fit";
 import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
 import { optimizeApplication } from "@/lib/services/ai-optimizer";
 
@@ -118,6 +119,11 @@ export async function POST(
       parsedJob
     });
     const optimizedCvText = masterCvToOptimizationText(optimized.optimizedCvJson);
+    const fitAssessment = assessApplicationFit({
+      applicationContext,
+      masterCv: optimized.optimizedCvJson,
+      parsedJob
+    });
 
     const updatedApplication = await prisma.application.update({
       where: { id: application.id },
@@ -125,6 +131,8 @@ export async function POST(
         atsScore: optimized.atsScore,
         baselineAtsScore: baselineScore,
         coverLetterText: optimized.coverLetterText,
+        fitAssessment,
+        fitScore: fitAssessment.fitScore,
         optimizedAt: new Date(),
         optimizedCvJson: optimized.optimizedCvJson,
         optimizedCvText
