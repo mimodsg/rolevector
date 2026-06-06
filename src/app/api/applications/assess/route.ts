@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { masterCvRecordToMasterCv } from "@/lib/master-cv";
 import { prisma } from "@/lib/prisma";
 import { assertSameOrigin } from "@/lib/server/request";
@@ -8,11 +8,13 @@ import { assessApplicationFit } from "@/lib/services/application-fit";
 import { extractApplicationContext } from "@/lib/services/application-context";
 import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
 import { parseJobDescription } from "@/lib/services/job-parser";
-import { z } from "zod";
 
 const assessApplicationSchema = z.object({
   company: z.string().trim().optional().default(""),
-  companyUrl: z.union([z.string().url("Enter a valid URL."), z.literal("")]).optional().default(""),
+  companyUrl: z
+    .union([z.string().url("Enter a valid URL."), z.literal("")])
+    .optional()
+    .default(""),
   jobDetails: z.string().trim().min(50, "Paste the full job details."),
   jobApplicationUrl: z
     .union([z.string().url("Enter a valid URL."), z.literal("")])

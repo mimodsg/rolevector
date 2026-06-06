@@ -333,7 +333,9 @@ export function OptimizeForm() {
         <Panel>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="font-title text-xl uppercase text-rv-text">Step 1: Begin Assessment</h2>
+              <h2 className="font-title text-xl uppercase text-rv-text">
+                Step 1: Begin Assessment
+              </h2>
               <p className="mt-2 text-sm leading-6 text-rv-text-muted">
                 Paste the job description only. The assessment extracts role signals first so you
                 can decide whether generation is worth the token cost.
@@ -373,7 +375,11 @@ export function OptimizeForm() {
               type="button"
               variant="secondary"
             >
-              {isAssessing ? "Assessing..." : assessment ? "Reassess Position" : "Begin Assessment"}
+              {isAssessing
+                ? "Assessing..."
+                : assessment
+                  ? "Reassess Position"
+                  : "Begin Assessment"}
             </Button>
           </div>
         </Panel>

@@ -104,7 +104,10 @@ function resolvePositionTitle(lines: string[], providedTitle?: string) {
 
   const labeledMatch = lines
     .slice(0, 10)
-    .map((line) => line.match(/^(?:job title|position title|title|role)\s*:\s*(.+)$/i)?.[1]?.trim())
+    .map(
+      (line) =>
+        line.match(/^(?:job title|position title|title|role)\s*:\s*(.+)$/i)?.[1]?.trim()
+    )
     .find(Boolean);
 
   if (labeledMatch) {
@@ -391,7 +394,12 @@ function roleTitleCandidate(line: string) {
     return false;
   }
 
-  if (/[:|]/.test(line) && !/(developer|engineer|designer|manager|architect|consultant|specialist|analyst|administrator|lead|director|editor|strategist)/i.test(line)) {
+  if (
+    /[:|]/.test(line) &&
+    !/(developer|engineer|designer|manager|architect|consultant|specialist|analyst|administrator|lead|director|editor|strategist)/i.test(
+      line
+    )
+  ) {
     return false;
   }
 
