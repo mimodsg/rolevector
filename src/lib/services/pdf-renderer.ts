@@ -67,7 +67,7 @@ export function renderCvHtml(cv: MasterCv) {
         <p class="contact">${escapeHtml(cv.basics.title)} | ${escapeHtml(cv.basics.email)} | ${escapeHtml(cv.basics.phone)} | ${escapeHtml(cv.basics.location)}</p>
         <h2>Professional Summary</h2>
         <p>${escapeHtml(cv.summary)}</p>
-        ${cv.frontend_expertise.length ? `<h2>Frontend Expertise</h2><p>${escapeHtml(cv.frontend_expertise.join(", "))}</p>` : ""}
+        ${cv.frontend_expertise.length ? `<h2>Fullstack Engineering</h2><p>${escapeHtml(cv.frontend_expertise.join(", "))}</p>` : ""}
         <h2>Hard Skills</h2>
         <p>${escapeHtml(cv.hard_skills.join(", "))}</p>
         <h2>Soft Skills</h2>

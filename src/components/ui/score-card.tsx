@@ -2,10 +2,14 @@ import { Panel } from "./panel";
 import { HelperText } from "./typography";
 
 export function ScoreCard({
+  headline = "Strong Match",
+  helperText = "Sample score component for job fit analysis.",
   label = "ATS Alignment",
   score,
   summary
 }: {
+  headline?: string;
+  helperText?: string;
   label?: string;
   score: string;
   summary: string;
@@ -14,14 +18,14 @@ export function ScoreCard({
     <Panel className="grid gap-4 bg-[radial-gradient(circle_at_top_right,rgba(238,223,122,0.14),transparent_46%),linear-gradient(145deg,var(--color-surface),#393535)]">
       <div>
         <h3 className="font-title text-xl uppercase text-rv-text">{label}</h3>
-        <HelperText>Sample score component for job fit analysis.</HelperText>
+        <HelperText>{helperText}</HelperText>
       </div>
       <div className="flex min-w-0 items-center gap-4">
         <div className="grid aspect-square h-[88px] place-items-center rounded-full border-8 border-rv-accent font-title text-3xl font-medium text-rv-highlight">
           {score}
         </div>
         <div className="min-w-0">
-          <strong className="text-rv-text">Strong Match</strong>
+          <strong className="text-rv-text">{headline}</strong>
           <HelperText className="break-words [overflow-wrap:anywhere]">{summary}</HelperText>
         </div>
       </div>

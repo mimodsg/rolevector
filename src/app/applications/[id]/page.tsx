@@ -7,10 +7,15 @@ import {
 import { ApplicationStatusSelect } from "@/components/applications/application-status-select";
 import { OptimizeApplicationButton } from "@/components/applications/optimize-application-button";
 import { RegenerateApplicationButton } from "@/components/applications/regenerate-application-button";
+import { Alert, Tag } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
+import { EmptyState } from "@/components/ui/empty-state";
 import { Panel } from "@/components/ui/panel";
 import { ScoreCard } from "@/components/ui/score-card";
-import { masterCvToOptimizationText } from "@/lib/master-cv-text";
+import {
+  masterCvToOptimizationText,
+  normalizeCvSectionLabels
+} from "@/lib/master-cv-text";
 import { masterCvSchema } from "@/lib/schemas/master-cv";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUserId } from "@/lib/server/session";
@@ -94,6 +99,99 @@ function stringList(value: unknown) {
     : [];
 }
 
+function workflowState({
+  fitSummary,
+  isOptimized,
+  fitScore
+}: {
+  fitSummary: string;
+  isOptimized: boolean;
+  fitScore: number;
+}) {
+  if (isOptimized) {
+    return {
+      actionText: "Export Approved",
+      canExport: true,
+      description:
+        "The Role Assessor, CV Editor, and CV Auditor completed successfully. Export is enabled.",
+      stage: "auditor_approved" as const,
+      tone: "success" as const
+    };
+  }
+
+  if (/CV Auditor did not approve/i.test(fitSummary)) {
+    return {
+      actionText: "Export Blocked",
+      canExport: false,
+      description:
+        "The CV Auditor rejected the tailored draft after one retry pass. Review the required fixes before retrying.",
+      stage: "auditor_rejected" as const,
+      tone: "warning" as const
+    };
+  }
+
+  if (/Role Assessor stopped optimization/i.test(fitSummary) || fitScore < 5) {
+    return {
+      actionText: "Assessment Rejected",
+      canExport: false,
+      description:
+        "The Role Assessor flagged this role as low fit. Proceed only if you intentionally want to spend tokens on a stretch application.",
+      stage: "assessor_rejected" as const,
+      tone: "warning" as const
+    };
+  }
+
+  return {
+    actionText: "Awaiting Workflow",
+    canExport: false,
+    description:
+      "The application has been assessed, but the CV workflow has not approved an export-ready version yet.",
+    stage: "ready_for_optimization" as const,
+    tone: "success" as const
+  };
+}
+
+function atsCardState({
+  fitDecision,
+  isOptimized,
+  workflowStage
+}: {
+  fitDecision: string;
+  isOptimized: boolean;
+  workflowStage: "assessor_rejected" | "auditor_approved" | "auditor_rejected" | "ready_for_optimization";
+}) {
+  if (isOptimized) {
+    return {
+      headline: "Approved Export Snapshot",
+      helperText: "ATS compatibility for the saved, export-ready CV.",
+      label: "ATS Compatibility"
+    };
+  }
+
+  if (workflowStage === "assessor_rejected") {
+    return {
+      headline: "Baseline Snapshot",
+      helperText: "This is only the raw Master CV compatibility baseline, not a fit recommendation.",
+      label: "Baseline ATS Compatibility"
+    };
+  }
+
+  if (workflowStage === "auditor_rejected") {
+    return {
+      headline: "Rejected Draft Baseline",
+      helperText: "The workflow did not approve an export-ready CV, so the baseline score is shown for reference only.",
+      label: "Baseline ATS Compatibility"
+    };
+  }
+
+  return {
+    headline:
+      fitDecision === "Worth optimizing" ? "Baseline Before Workflow" : "Baseline Snapshot",
+    helperText: "Compatibility score from the current Master CV before an approved workflow run.",
+    label: "Baseline ATS Compatibility"
+  };
+}
+
 export default async function ApplicationPreviewPage({
   params
 }: {
@@ -110,8 +208,9 @@ export default async function ApplicationPreviewPage({
   }
 
   const cv = masterCvSchema.parse(application.optimizedCvJson);
-  const optimizedCvText =
-    application.optimizedCvText || masterCvToOptimizationText(cv);
+  const optimizedCvText = normalizeCvSectionLabels(
+    application.optimizedCvText || masterCvToOptimizationText(cv)
+  );
   const scoreDelta = Number(
     (application.atsScore - application.baselineAtsScore).toFixed(1)
   );
@@ -120,6 +219,16 @@ export default async function ApplicationPreviewPage({
   const decision = applicationDecisionFromFit({
     fitAssessment: application.fitAssessment,
     fitScore: application.fitScore
+  });
+  const workflow = workflowState({
+    fitSummary: fit?.summary ?? "",
+    fitScore: application.fitScore,
+    isOptimized
+  });
+  const atsCard = atsCardState({
+    fitDecision: decision.decision,
+    isOptimized,
+    workflowStage: workflow.stage
   });
   const companyInsights = contextInsights(application.companyContext);
   const jobPageInsights = contextInsights(application.jobContext);
@@ -135,11 +244,34 @@ export default async function ApplicationPreviewPage({
         <div className="flex flex-wrap gap-3">
           <RegenerateApplicationButton applicationId={application.id} />
           {isOptimized ? null : (
-            <OptimizeApplicationButton applicationId={application.id} />
+            <OptimizeApplicationButton
+              applicationId={application.id}
+              confirmMessage={
+                workflow.stage === "assessor_rejected"
+                  ? "This role was assessed as low fit. Running the CV workflow anyway may spend more tokens on a weak opportunity. Continue?"
+                  : undefined
+              }
+              confirmTitle={
+                workflow.stage === "assessor_rejected"
+                  ? "Override Low-Fit Assessment?"
+                  : workflow.stage === "auditor_rejected"
+                    ? "Retry Rejected Workflow?"
+                    : "Proceed With Workflow?"
+              }
+              label={
+                workflow.stage === "assessor_rejected"
+                  ? "Override and Run CV Workflow"
+                  : workflow.stage === "auditor_rejected"
+                    ? "Retry CV Workflow"
+                    : "Run CV Workflow"
+              }
+            />
           )}
-          <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="highlight">
-            Download PDFs
-          </ButtonLink>
+          {workflow.canExport ? (
+            <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="highlight">
+              Download PDFs
+            </ButtonLink>
+          ) : null}
         </div>
       }
       title="Application Preview"
@@ -185,6 +317,16 @@ export default async function ApplicationPreviewPage({
             </dl>
           </Panel>
 
+          {!workflow.canExport ? (
+            <Alert tone={workflow.tone}>
+              <div className="flex flex-wrap items-center gap-3">
+                <Tag>{workflow.actionText}</Tag>
+                <span className="font-semibold">PDF export is currently disabled.</span>
+              </div>
+              <p className="mt-3">{workflow.description}</p>
+            </Alert>
+          ) : null}
+
           <Panel>
             <h2 className="font-title text-xl uppercase text-rv-text">Optimized CV</h2>
             <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-rv-text-muted">
@@ -200,6 +342,43 @@ export default async function ApplicationPreviewPage({
         </div>
 
         <aside className="grid min-w-0 max-w-full content-start gap-6 overflow-hidden">
+          <Panel className="min-w-0 overflow-hidden">
+            <h2 className="font-title text-xl uppercase text-rv-text">Workflow Status</h2>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Tag>Role Assessor</Tag>
+              <Tag tone={workflow.stage === "assessor_rejected" ? "admin" : "authenticated"}>
+                {decision.decision}
+              </Tag>
+              <Tag
+                tone={
+                  workflow.stage === "auditor_approved" ? "authenticated" : "neutral"
+                }
+              >
+                {isOptimized ? "CV Auditor Approved" : "CV Auditor Pending"}
+              </Tag>
+            </div>
+            <p className="mt-4 text-sm leading-6 text-rv-text-muted">
+              {workflow.description}
+            </p>
+            <dl className="mt-4 space-y-4 text-sm">
+              <div>
+                <dt className="font-bold text-rv-text-soft">Assessment</dt>
+                <dd className="mt-1 text-rv-text-muted">{decision.decision}</dd>
+              </div>
+              <div>
+                <dt className="font-bold text-rv-text-soft">Generation status</dt>
+                <dd className="mt-1 text-rv-text-muted">
+                  {isOptimized ? "Approved CV saved" : "No export-ready CV saved"}
+                </dd>
+              </div>
+              <div>
+                <dt className="font-bold text-rv-text-soft">Export status</dt>
+                <dd className="mt-1 text-rv-text-muted">
+                  {workflow.canExport ? "Enabled" : "Blocked until approval"}
+                </dd>
+              </div>
+            </dl>
+          </Panel>
           <Panel className="min-w-0 overflow-hidden">
             <h2 className="font-title text-xl uppercase text-rv-text">Apply Fit</h2>
             <div className="mt-4 rounded-rvmd border border-rv-border bg-rv-bg p-4">
@@ -270,11 +449,18 @@ export default async function ApplicationPreviewPage({
             ) : null}
           </Panel>
           <ScoreCard
+            headline={atsCard.headline}
+            helperText={atsCard.helperText}
+            label={atsCard.label}
             score={application.atsScore.toFixed(1)}
             summary={
               isOptimized
                 ? `Optimized from ${application.baselineAtsScore.toFixed(1)} to ${application.atsScore.toFixed(1)} (${scoreDelta >= 0 ? "+" : ""}${scoreDelta}).`
-                : "Baseline snapshot from your Master CV. Run optimization from this preview."
+                : workflow.stage === "assessor_rejected"
+                  ? "Baseline snapshot retained because the Role Assessor did not recommend proceeding."
+                  : workflow.stage === "auditor_rejected"
+                    ? "Baseline snapshot retained because the CV Auditor did not approve export."
+                    : "Baseline snapshot from your Master CV. Run the CV workflow from this preview."
             }
           />
           <Panel className="min-w-0 overflow-hidden">
@@ -289,7 +475,13 @@ export default async function ApplicationPreviewPage({
               <div>
                 <dt className="font-bold text-rv-text-soft">After optimization</dt>
                 <dd className="mt-1 text-rv-text-muted">
-                  {isOptimized ? application.atsScore.toFixed(1) : "Not optimized yet"}
+                  {isOptimized
+                    ? application.atsScore.toFixed(1)
+                    : workflow.stage === "auditor_rejected"
+                      ? "Rejected by CV Auditor"
+                      : workflow.stage === "assessor_rejected"
+                        ? "Stopped by Role Assessor"
+                        : "Not optimized yet"}
                 </dd>
               </div>
               <div>
@@ -348,7 +540,7 @@ export default async function ApplicationPreviewPage({
                   <h3 className="font-bold text-rv-text-soft">Job page insights</h3>
                   {jobPageInsights.length > 0 ? (
                     <ul className="mt-2 list-disc space-y-2 break-words pl-5 leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
-                      {jobPageInsights.map((insight) => (
+                  {jobPageInsights.map((insight) => (
                         <li key={insight}>{insight}</li>
                       ))}
                     </ul>
@@ -417,6 +609,44 @@ export default async function ApplicationPreviewPage({
               </div>
             ) : null}
           </Panel>
+          {!workflow.canExport ? (
+            <EmptyState
+              action={
+                !isOptimized ? (
+                  <OptimizeApplicationButton
+                    applicationId={application.id}
+                    confirmMessage={
+                      workflow.stage === "assessor_rejected"
+                        ? "This role was assessed as low fit. Running the CV workflow anyway may spend more tokens on a weak opportunity. Continue?"
+                        : undefined
+                    }
+                    confirmTitle={
+                      workflow.stage === "assessor_rejected"
+                        ? "Override Low-Fit Assessment?"
+                        : workflow.stage === "auditor_rejected"
+                          ? "Retry Rejected Workflow?"
+                          : "Proceed With Workflow?"
+                    }
+                    label={
+                      workflow.stage === "assessor_rejected"
+                        ? "Override and Run CV Workflow"
+                        : workflow.stage === "auditor_rejected"
+                          ? "Retry CV Workflow"
+                          : "Run CV Workflow"
+                    }
+                  />
+                ) : null
+              }
+              description={
+                workflow.stage === "assessor_rejected"
+                  ? "This role was assessed as low fit. Use the override action only if you intentionally want to proceed despite that recommendation."
+                  : workflow.stage === "auditor_rejected"
+                    ? "The workflow generated a draft but did not approve it for export. Use the warnings in Apply Fit before retrying."
+                    : "Run the CV workflow to produce an export-ready application package."
+              }
+              title="Export Locked"
+            />
+          ) : null}
         </aside>
       </section>
     </AppShell>

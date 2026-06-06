@@ -23,6 +23,16 @@ export async function GET(
     return NextResponse.json({ error: "Application not found." }, { status: 404 });
   }
 
+  if (!application.optimizedAt) {
+    return NextResponse.json(
+      {
+        error:
+          "Export is available only after the CV workflow approves the application for export."
+      },
+      { status: 409 }
+    );
+  }
+
   const cv = masterCvSchema.parse(application.optimizedCvJson);
   const names = applicationDocumentNames({
     candidateName: cv.basics.full_name,

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { masterCvRecordToMasterCv } from "@/lib/master-cv";
-import { masterCvToOptimizationText } from "@/lib/master-cv-text";
+import {
+  masterCvToOptimizationText,
+  normalizeCvSectionLabels
+} from "@/lib/master-cv-text";
 import { prisma } from "@/lib/prisma";
 import { parsedJobSchema } from "@/lib/schemas/job";
 import { assertSameOrigin } from "@/lib/server/request";
@@ -89,7 +92,7 @@ export async function POST(
         }),
         optimizedAt: null,
         optimizedCvJson: masterCv,
-        optimizedCvText: masterCvText,
+        optimizedCvText: normalizeCvSectionLabels(masterCvText),
         fitAssessment,
         fitScore: fitAssessment.fitScore
       }

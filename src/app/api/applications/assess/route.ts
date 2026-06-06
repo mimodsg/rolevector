@@ -1,24 +1,31 @@
 import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 import { masterCvRecordToMasterCv } from "@/lib/master-cv";
-import {
-  masterCvToOptimizationText,
-  normalizeCvSectionLabels
-} from "@/lib/master-cv-text";
 import { prisma } from "@/lib/prisma";
-import { createApplicationSchema } from "@/lib/schemas/application";
 import { assertSameOrigin } from "@/lib/server/request";
 import { requireCurrentUserId } from "@/lib/server/session";
 import { assessApplicationFit } from "@/lib/services/application-fit";
 import { extractApplicationContext } from "@/lib/services/application-context";
 import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
-import { generateCoverLetter } from "@/lib/services/cover-letter-generator";
 import { parseJobDescription } from "@/lib/services/job-parser";
+import { z } from "zod";
+
+const assessApplicationSchema = z.object({
+  company: z.string().trim().optional().default(""),
+  companyUrl: z.union([z.string().url("Enter a valid URL."), z.literal("")]).optional().default(""),
+  jobDetails: z.string().trim().min(50, "Paste the full job details."),
+  jobApplicationUrl: z
+    .union([z.string().url("Enter a valid URL."), z.literal("")])
+    .optional()
+    .default(""),
+  positionTitle: z.string().trim().optional().default(""),
+  salary: z.string().trim().optional().default("")
+});
 
 function apiError(error: unknown) {
   if (error instanceof Response) {
     return NextResponse.json(
-      { error: error.statusText || "The application request was not allowed." },
+      { error: error.statusText || "The assessment request was not allowed." },
       { status: error.status || 500 }
     );
   }
@@ -33,16 +40,6 @@ function apiError(error: unknown) {
   throw error;
 }
 
-export async function GET() {
-  const userId = await requireCurrentUserId();
-  const applications = await prisma.application.findMany({
-    where: { userId },
-    orderBy: { createdAt: "desc" }
-  });
-
-  return NextResponse.json({ applications });
-}
-
 export async function POST(request: Request) {
   try {
     const userId = await requireCurrentUserId();
@@ -54,7 +51,7 @@ export async function POST(request: Request) {
       jobDetails,
       positionTitle,
       salary
-    } = createApplicationSchema.parse(await request.json());
+    } = assessApplicationSchema.parse(await request.json());
     const masterCvRecord = await prisma.masterCV.findUnique({
       where: { userId },
       include: {
@@ -72,13 +69,12 @@ export async function POST(request: Request) {
 
     if (!masterCvRecord) {
       return NextResponse.json(
-        { error: "Create a master CV before creating an application." },
+        { error: "Create a master CV before assessing an application." },
         { status: 400 }
       );
     }
 
     const masterCv = masterCvRecordToMasterCv(masterCvRecord);
-    const masterCvText = masterCvToOptimizationText(masterCv);
     const parsedJob = parseJobDescription({
       company,
       jobDetails,
@@ -90,45 +86,41 @@ export async function POST(request: Request) {
       companyUrl,
       jobApplicationUrl
     });
-    const baselineScore = scoreAtsCompatibility(masterCv, parsedJob).overall;
+    const baselineAts = scoreAtsCompatibility(masterCv, parsedJob);
     const fitAssessment = assessApplicationFit({
       applicationContext,
       masterCv,
       parsedJob
     });
-    const coverLetterTemplate = await prisma.coverLetterTemplate.findUnique({
-      where: { userId }
-    });
-    const application = await prisma.application.create({
-      data: {
-        userId,
-        companyContext: applicationContext.companyContext,
+
+    return NextResponse.json({
+      assessment: {
+        applicationContext,
+        atsBreakdown: baselineAts,
+        baselineAtsScore: baselineAts.overall,
         companyName: parsedJob.company_name,
-        companyUrl: applicationContext.companyUrl,
-        positionTitle: parsedJob.position_title,
-        salary,
-        location: parsedJob.location,
-        jobApplicationUrl: applicationContext.jobApplicationUrl,
-        jobContext: applicationContext.jobContext,
-        jobDetails,
-        parsedMetadata: parsedJob,
-        optimizedCvJson: masterCv,
-        optimizedCvText: normalizeCvSectionLabels(masterCvText),
-        coverLetterText: generateCoverLetter({
-          masterCv,
-          parsedJob,
-          applicationContext,
-          template: coverLetterTemplate?.content
-        }),
-        baselineAtsScore: baselineScore,
-        atsScore: baselineScore,
+        decision: fitAssessment.decision,
         fitAssessment,
-        fitScore: fitAssessment.fitScore
+        fitScore: fitAssessment.fitScore,
+        parsedJob,
+        positionTitle: parsedJob.position_title,
+        salary: salary || "",
+        workflowStatus: workflowStatusFromFit(fitAssessment.fitScore)
       }
     });
-
-    return NextResponse.json({ application });
   } catch (error) {
     return apiError(error);
   }
+}
+
+function workflowStatusFromFit(fitScore: number) {
+  if (fitScore >= 7) {
+    return "ready_for_generation";
+  }
+
+  if (fitScore >= 5) {
+    return "ready_with_caution";
+  }
+
+  return "assessment_rejected";
 }

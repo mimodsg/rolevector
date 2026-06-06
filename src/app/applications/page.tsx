@@ -93,9 +93,14 @@ export default async function ApplicationsPage() {
                         <ButtonLink href={`/applications/${application.id}`} variant="ghost">
                           Preview
                         </ButtonLink>
-                        <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="ghost">
-                          Download PDFs
-                        </ButtonLink>
+                        {application.optimizedAt ? (
+                          <ButtonLink
+                            href={`/api/applications/${application.id}/pdf`}
+                            variant="ghost"
+                          >
+                            Download PDFs
+                          </ButtonLink>
+                        ) : null}
                       </div>
                     </td>
                   </tr>

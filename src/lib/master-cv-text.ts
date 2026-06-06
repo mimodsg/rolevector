@@ -1,10 +1,10 @@
 import type { MasterCv } from "@/lib/schemas/master-cv";
 
 export function masterCvToOptimizationText(masterCv: MasterCv) {
-  return [
+  return normalizeCvSectionLabels([
     renderBasics(masterCv),
     section("Professional Summary", masterCv.summary),
-    section("Frontend Expertise", list(masterCv.frontend_expertise)),
+    section("Fullstack Engineering", list(masterCv.frontend_expertise)),
     section("Hard Skills", list(masterCv.hard_skills)),
     section("Soft Skills", list(masterCv.soft_skills)),
     section(
@@ -28,7 +28,14 @@ export function masterCvToOptimizationText(masterCv: MasterCv) {
     )
   ]
     .filter(Boolean)
-    .join("\n\n");
+    .join("\n\n"));
+}
+
+export function normalizeCvSectionLabels(text: string) {
+  return text.replace(
+    /(^|\n)(Frontend Expertise)(?=\n|$)/gi,
+    "$1Fullstack Engineering"
+  );
 }
 
 function renderTechnicalSkills(masterCv: MasterCv) {

@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server";
 import { masterCvRecordToMasterCv } from "@/lib/master-cv";
-import { masterCvToOptimizationText } from "@/lib/master-cv-text";
+import {
+  masterCvToOptimizationText,
+  normalizeCvSectionLabels
+} from "@/lib/master-cv-text";
 import { prisma } from "@/lib/prisma";
 import { parsedJobSchema } from "@/lib/schemas/job";
 import { assertSameOrigin } from "@/lib/server/request";
@@ -118,23 +121,27 @@ export async function POST(
       masterCvText,
       parsedJob
     });
-    const optimizedCvText = masterCvToOptimizationText(optimized.optimizedCvJson);
+    const persistedCv = optimized.exportReady ? optimized.optimizedCvJson : masterCv;
+    const optimizedCvText = normalizeCvSectionLabels(masterCvToOptimizationText(persistedCv));
     const fitAssessment = assessApplicationFit({
       applicationContext,
-      masterCv: optimized.optimizedCvJson,
+      masterCv: persistedCv,
       parsedJob
     });
+    const mergedFitAssessment = mergeWorkflowWarnings(fitAssessment, optimized);
 
     const updatedApplication = await prisma.application.update({
       where: { id: application.id },
       data: {
-        atsScore: optimized.atsScore,
+        atsScore: optimized.exportReady ? optimized.atsScore : baselineScore,
         baselineAtsScore: baselineScore,
-        coverLetterText: optimized.coverLetterText,
-        fitAssessment,
-        fitScore: fitAssessment.fitScore,
-        optimizedAt: new Date(),
-        optimizedCvJson: optimized.optimizedCvJson,
+        coverLetterText: optimized.exportReady
+          ? optimized.coverLetterText
+          : application.coverLetterText,
+        fitAssessment: mergedFitAssessment,
+        fitScore: optimized.workflow.assessor.fitScore,
+        optimizedAt: optimized.exportReady ? new Date() : null,
+        optimizedCvJson: persistedCv,
         optimizedCvText
       }
     });
@@ -165,4 +172,36 @@ export async function POST(
 
     return apiError(error);
   }
+}
+
+function mergeWorkflowWarnings(
+  fitAssessment: ReturnType<typeof assessApplicationFit>,
+  optimized: Awaited<ReturnType<typeof optimizeApplication>>
+) {
+  const auditFixes = optimized.workflow.audits.flatMap((audit) => audit.requiredFixes);
+  const riskFlags = unique([
+    ...fitAssessment.riskFlags,
+    ...optimized.workflow.assessor.riskNotes,
+    ...auditFixes
+  ]);
+  const statusSummary =
+    optimized.workflow.status === "approved"
+      ? fitAssessment.summary
+      : optimized.workflow.status === "skipped_low_fit"
+        ? `Role Assessor stopped optimization at ${optimized.workflow.assessor.fitScore}/10. Review the risk flags before spending time on this role.`
+        : "CV Auditor did not approve the tailored CV after one retry pass. Review the required fixes before exporting.";
+
+  return {
+    ...fitAssessment,
+    gaps: unique([
+      ...fitAssessment.gaps,
+      ...optimized.workflow.assessor.missingRequirements
+    ]),
+    riskFlags,
+    summary: statusSummary
+  };
+}
+
+function unique(values: string[]) {
+  return [...new Set(values.filter(Boolean))];
 }

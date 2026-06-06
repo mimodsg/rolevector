@@ -5,6 +5,8 @@ export type ApplicationContext = {
   jobContext: string;
 };
 
+type ContextMode = "company" | "job";
+
 const maxContextLength = 2400;
 const maxCompanyContextLength = 6000;
 const maxCompanyPages = 5;
@@ -70,7 +72,7 @@ async function fetchPublicPageContext(value?: string) {
         return "";
       }
 
-      return formatPageContext(url, extractUsefulText(await response.text()));
+      return formatPageContext(url, extractUsefulText(await response.text(), "job"));
     } finally {
       clearTimeout(timeout);
     }
@@ -96,7 +98,7 @@ async function fetchCompanyContext(value?: string) {
 
   return pages
     .filter((page): page is { html: string; url: string } => Boolean(page))
-    .map((page) => formatPageContext(page.url, extractUsefulText(page.html)))
+    .map((page) => formatPageContext(page.url, extractUsefulText(page.html, "company")))
     .filter(Boolean)
     .join("\n\n")
     .slice(0, maxCompanyContextLength);
@@ -326,7 +328,7 @@ function isBlockedHostname(hostname: string) {
   return false;
 }
 
-function extractUsefulText(html: string) {
+function extractUsefulText(html: string, mode: ContextMode) {
   const clippedHtml = html.slice(0, 500_000);
   const title = matchContent(clippedHtml, /<title[^>]*>([\s\S]*?)<\/title>/i);
   const description =
@@ -337,11 +339,28 @@ function extractUsefulText(html: string) {
     matchContent(
       clippedHtml,
       /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i
+    ) ||
+    matchContent(
+      clippedHtml,
+      /<meta[^>]+property=["']og:description["'][^>]+content=["']([^"']+)["'][^>]*>/i
     );
-  const bodyText = stripHtml(clippedHtml)
-    .slice(0, maxTextLength);
+  const blocks = rankContextBlocks(
+    dedupeBlocks([
+      ...extractStructuredBlocks(clippedHtml),
+      ...extractSentenceBlocks(stripHtml(clippedHtml).slice(0, maxTextLength))
+    ]),
+    mode
+  )
+    .slice(0, 8)
+    .map((item) => item.text);
+  const safeTitle = keepContextLine(title, mode);
+  const safeDescription = keepContextLine(description, mode);
 
-  return [title ? `Title: ${title}` : "", description ? `Description: ${description}` : "", bodyText]
+  return [
+    safeTitle ? `Title: ${safeTitle}` : "",
+    safeDescription ? `Description: ${safeDescription}` : "",
+    ...blocks
+  ]
     .filter(Boolean)
     .join("\n")
     .slice(0, maxContextLength);
@@ -365,11 +384,147 @@ function stripHtml(value: string) {
     .replace(/&amp;/g, "&")
     .replace(/&quot;/g, '"')
     .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) =>
+      String.fromCharCode(Number.parseInt(code, 16))
+    )
     .replace(/\s+/g, " ")
     .trim()
     ;
 }
 
 function matchContent(value: string, pattern: RegExp) {
-  return value.match(pattern)?.[1]?.replace(/\s+/g, " ").trim() ?? "";
+  return decodeEntities(value.match(pattern)?.[1] ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
 }
+
+function extractStructuredBlocks(html: string) {
+  const matches = [
+    ...html.matchAll(/<(h1|h2|h3|p|li)[^>]*>([\s\S]*?)<\/\1>/gi)
+  ];
+
+  return matches
+    .map((match) => stripHtml(decodeEntities(match[2] ?? "")))
+    .filter(Boolean);
+}
+
+function extractSentenceBlocks(text: string) {
+  return text
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function dedupeBlocks(values: string[]) {
+  return [...new Set(values.map(normalizeWhitespace).filter(Boolean))];
+}
+
+function rankContextBlocks(values: string[], mode: ContextMode) {
+  return values
+    .map((text) => ({
+      score: contextBlockScore(text, mode),
+      text
+    }))
+    .filter((item) => item.score > 0)
+    .sort((a, b) => b.score - a.score || a.text.localeCompare(b.text));
+}
+
+function keepContextLine(value: string, mode: ContextMode) {
+  const line = normalizeWhitespace(decodeEntities(value));
+
+  return contextBlockScore(line, mode) > 0 ? line : "";
+}
+
+function contextBlockScore(value: string, mode: ContextMode) {
+  const text = normalizeWhitespace(value);
+  const normalized = text.toLowerCase();
+
+  if (!text || text.length < 35 || text.length > 320) {
+    return -1;
+  }
+
+  if (irrelevantContextPatterns.some((pattern) => pattern.test(normalized))) {
+    return -3;
+  }
+
+  let score = 0;
+
+  if (mode === "job") {
+    if (/\bresponsibilit|qualification|requirement|must have|preferred|nice to have\b/.test(normalized)) {
+      score += 4;
+    }
+
+    if (/\bexperience with|proficien|build|develop|design|lead|maintain|support|collaborate|mentor|own\b/.test(normalized)) {
+      score += 3;
+    }
+
+    if (/\breact|next\.js|typescript|graphql|node\.js|api|cms|drupal|figma|accessibility|docker|kubernetes|postgresql|prisma\b/.test(normalized)) {
+      score += 3;
+    }
+  }
+
+  if (mode === "company") {
+    if (/\bcompany|team|culture|mission|values|customers|platform|products?|services?\b/.test(normalized)) {
+      score += 3;
+    }
+
+    if (/\bbuild|develop|deliver|support|serve|work with|partner with\b/.test(normalized)) {
+      score += 2;
+    }
+
+    if (/\bengineering|technology|digital|software|design|content|data\b/.test(normalized)) {
+      score += 2;
+    }
+  }
+
+  if (/\bunited states\b|\btoday'?s top \d+\b|\bsearch options\b|\bprofessional network\b/.test(normalized)) {
+    score -= 4;
+  }
+
+  return score;
+}
+
+function normalizeWhitespace(value: string) {
+  return value.replace(/\s+/g, " ").trim();
+}
+
+function decodeEntities(value: string) {
+  return value
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#(\d+);/g, (_match, code) => String.fromCharCode(Number(code)))
+    .replace(/&#x([0-9a-f]+);/gi, (_match, code) =>
+      String.fromCharCode(Number.parseInt(code, 16))
+    );
+}
+
+const irrelevantContextPatterns = [
+  /\bsearch options\b/,
+  /\bwhen expanded it provides a list\b/,
+  /\btoday'?s top \d+\b/,
+  /\bleverage your professional network\b/,
+  /\bnew .* jobs added daily\b/,
+  /\bskip to main content\b/,
+  /\bsign in\b/,
+  /\bjoin now\b/,
+  /\bcookie\b/,
+  /\bprivacy policy\b/,
+  /\bterms of use\b/,
+  /\ball rights reserved\b/,
+  /\buse left and right arrow\b/,
+  /\bshow more\b/,
+  /\bread more\b/,
+  /\bapply now\b/,
+  /\beasy apply\b/,
+  /\bloading\b/,
+  /\bpage not found\b/,
+  /\bjob alert\b/,
+  /\bmatches your preferences\b/
+];
