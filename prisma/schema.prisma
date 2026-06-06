@@ -30,6 +30,7 @@ model User {
   createdAt    DateTime             @default(now()) @map("created_at")
   updatedAt    DateTime             @updatedAt @map("updated_at")
   masterCv     MasterCV?
+  optimizedMasterCvs OptimizedMasterCV[]
   coverLetter  CoverLetterTemplate?
   applications Application[]
   aiUsage      AIUsage[]
@@ -80,11 +81,32 @@ model MasterCV {
   workExperiences            MasterCVWorkExperience[]
   projects                   MasterCVProject[]
   educationEntries           MasterCVEducation[]
+  optimizedVersions          OptimizedMasterCV[]
   createdAt                  DateTime                 @default(now()) @map("created_at")
   updatedAt                  DateTime                 @updatedAt @map("updated_at")
   user                       User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("master_cvs")
+}
+
+model OptimizedMasterCV {
+  id                 String   @id @default(cuid())
+  userId             String   @map("user_id")
+  masterCvId         String   @map("master_cv_id")
+  revisionNumber     Int      @default(1) @map("revision_number")
+  isMain             Boolean  @default(false) @map("is_main")
+  cvJson             Json     @map("cv_json")
+  appliedSuggestionIds String[] @default([]) @map("applied_suggestion_ids")
+  promotedAt         DateTime? @map("promoted_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  masterCv           MasterCV @relation(fields: [masterCvId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isMain])
+  @@index([userId, createdAt])
+  @@index([masterCvId, revisionNumber])
+  @@map("optimized_master_cvs")
 }
 
 model MasterCVWorkExperience {
