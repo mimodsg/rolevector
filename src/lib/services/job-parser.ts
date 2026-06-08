@@ -199,15 +199,24 @@ function classifyLines(lines: string[]) {
   const classified: Array<{ kind: SectionKind; text: string }> = [];
   let section: SectionKind = "other";
 
-  for (const line of lines) {
-    const nextSection = sectionFromHeading(line);
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    const heading = sectionHeading(line);
 
-    if (nextSection) {
-      section = nextSection;
+    if (heading) {
+      section = heading.kind;
+
+      if (heading.remainder && shouldCaptureLine(heading.remainder, section)) {
+        classified.push({
+          kind: inferLineKind(heading.remainder, section),
+          text: cleanBullet(heading.remainder)
+        });
+      }
+
       continue;
     }
 
-    if (!isCandidateContentLine(line)) {
+    if (!shouldCaptureLine(line, section)) {
       continue;
     }
 
@@ -221,29 +230,38 @@ function classifyLines(lines: string[]) {
   return classified;
 }
 
-function sectionFromHeading(line: string): SectionKind | null {
-  if (
-    /^(requirements|required qualifications|must have|what you bring|what we're looking for)[:]?$/i.test(
-      line
-    )
-  ) {
-    return "required";
+function sectionHeading(line: string): { kind: SectionKind; remainder: string } | null {
+  const requiredHeading = line.match(
+    /^(requirements|required qualifications|must have|what you bring|what we're looking for)[:\s-]*(.*)$/i
+  );
+
+  if (requiredHeading) {
+    return {
+      kind: "required",
+      remainder: cleanBullet(requiredHeading[1] ? requiredHeading[2] ?? "" : "")
+    };
   }
 
-  if (
-    /^(preferred qualifications|nice to have|bonus points|preferred|pluses)[:]?$/i.test(
-      line
-    )
-  ) {
-    return "preferred";
+  const preferredHeading = line.match(
+    /^(preferred qualifications|nice to have|bonus points|preferred|pluses)[:\s-]*(.*)$/i
+  );
+
+  if (preferredHeading) {
+    return {
+      kind: "preferred",
+      remainder: cleanBullet(preferredHeading[1] ? preferredHeading[2] ?? "" : "")
+    };
   }
 
-  if (
-    /^(responsibilities|what you'll do|what you will do|your responsibilities|duties)[:]?$/i.test(
-      line
-    )
-  ) {
-    return "responsibility";
+  const responsibilityHeading = line.match(
+    /^(responsibilities|what you'll do|what you will do|your responsibilities|duties)[:\s-]*(.*)$/i
+  );
+
+  if (responsibilityHeading) {
+    return {
+      kind: "responsibility",
+      remainder: cleanBullet(responsibilityHeading[1] ? responsibilityHeading[2] ?? "" : "")
+    };
   }
 
   return null;
@@ -271,6 +289,18 @@ function inferLineKind(line: string, currentSection: SectionKind): SectionKind {
   }
 
   return "other";
+}
+
+function shouldCaptureLine(line: string, currentSection: SectionKind) {
+  if (!line.trim()) {
+    return false;
+  }
+
+  if (currentSection !== "other") {
+    return true;
+  }
+
+  return isCandidateContentLine(line);
 }
 
 function extractLocation(lines: string[]) {
@@ -328,6 +358,12 @@ function canonicalizeOrFormatSkill(value: string, skillDictionary: SkillDictiona
 
   if (!normalized) {
     return "";
+  }
+
+  const aliased = phraseAliases.get(normalized);
+
+  if (aliased) {
+    return aliased;
   }
 
   const exact = skillDictionary.canonicalByNormalized.get(normalized);
@@ -459,7 +495,7 @@ function likelySkillPhrase(value: string) {
 function isCandidateContentLine(line: string) {
   return (
     /^[-*•]/.test(line) ||
-    /\b(required|preferred|experience|design|build|develop|lead|maintain|support|collaborate|mentor|own|proficient)\b/i.test(
+    /\b(required|preferred|experience|design|build|develop|lead|maintain|support|collaborate|mentor|own|proficient|qualifications|responsibilities|skills|knowledge|familiarity|expertise)\b/i.test(
       line
     )
   );
@@ -518,4 +554,13 @@ const genericRequirementPhrases = new Set([
   "bachelor s degree",
   "degree",
   "computer science"
+]);
+
+const phraseAliases = new Map([
+  ["content management system", "CMS"],
+  ["content management systems", "CMS"],
+  ["api integration", "API"],
+  ["api integrations", "API"],
+  ["application programming interface", "API"],
+  ["application programming interfaces", "API"]
 ]);

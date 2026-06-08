@@ -8,7 +8,6 @@ import {
 } from "@/components/applications/application-decision-flag";
 import { Alert, Tag } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Field, TextArea, TextInput } from "@/components/ui/field";
 import { Metric } from "@/components/ui/metric";
 import { Panel } from "@/components/ui/panel";
@@ -183,7 +182,6 @@ export function OptimizeForm() {
     null
   );
   const [error, setError] = useState<string | null>(null);
-  const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [jobDetails, setJobDetails] = useState("");
   const [jobApplicationUrl, setJobApplicationUrl] = useState("");
   const [isAssessing, setIsAssessing] = useState(false);
@@ -196,6 +194,7 @@ export function OptimizeForm() {
     fitScore: assessment?.fitScore ?? 0
   });
   const isLowFit = decision.decision === "Explore another opportunity";
+  const showGenerationStep = assessment?.workflowStatus !== "assessment_rejected";
   const companyInsights = contextInsights(assessment?.applicationContext.companyContext ?? "");
   const jobInsights = contextInsights(assessment?.applicationContext.jobContext ?? "");
 
@@ -249,7 +248,6 @@ export function OptimizeForm() {
     }
 
     setError(null);
-    setIsConfirmOpen(false);
     setIsOptimizing(true);
 
     try {
@@ -283,7 +281,7 @@ export function OptimizeForm() {
     }
 
     if (isLowFit) {
-      setIsConfirmOpen(true);
+      setError("This role is below the fit threshold. Reassess a stronger opportunity instead.");
       return;
     }
 
@@ -384,7 +382,7 @@ export function OptimizeForm() {
           </div>
         </Panel>
 
-        {assessment ? (
+        {assessment && showGenerationStep ? (
           <Panel as="form" className="block" onSubmit={optimize}>
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
@@ -460,12 +458,6 @@ export function OptimizeForm() {
               <p className="mt-3">
                 {assessment.fitAssessment.summary ?? "Assessment complete."}
               </p>
-              {isLowFit ? (
-                <p className="mt-3 text-sm leading-6">
-                  The workflow recommends stopping here to avoid spending tokens on a weak-fit
-                  opportunity. Continue only if you intentionally want to override that advice.
-                </p>
-              ) : null}
             </Alert>
 
             <div className="mt-4 flex flex-wrap gap-3">
@@ -473,6 +465,38 @@ export function OptimizeForm() {
                 {isOptimizing ? "Generating..." : "Continue To Generation"}
               </Button>
             </div>
+          </Panel>
+        ) : null}
+
+        {assessment && !showGenerationStep ? (
+          <Panel>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <h2 className="font-title text-xl uppercase text-rv-text">
+                  Step 2: Generation Blocked
+                </h2>
+                <p className="mt-2 text-sm leading-6 text-rv-text-muted">
+                  This role did not meet the minimum fit threshold. Generation stays locked on the
+                  new-application flow to avoid unnecessary token spend.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-3">
+                <ApplicationDecisionFlag {...decision} />
+                <Tag>{statusLabel(assessment.workflowStatus, isLowFit)}</Tag>
+              </div>
+            </div>
+            <Alert className="mt-4" tone="warning">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="font-semibold">
+                  Fit score: {assessment.fitScore.toFixed(1)} / 10
+                </span>
+                <Tag>{assessment.fitAssessment.recommendation ?? "Low fit"}</Tag>
+              </div>
+              <p className="mt-3">
+                {assessment.fitAssessment.summary ??
+                  "The workflow recommends not proceeding with this position."}
+              </p>
+            </Alert>
           </Panel>
         ) : null}
 
@@ -568,12 +592,29 @@ export function OptimizeForm() {
               </div>
 
               <Panel>
+                <h2 className="font-title text-xl uppercase text-rv-text">
+                  Job Required Skills
+                </h2>
+                {stringList(assessment.parsedJob.required_skills).length > 0 ? (
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {stringList(assessment.parsedJob.required_skills).map((item) => (
+                      <Tag key={item}>{item}</Tag>
+                    ))}
+                  </div>
+                ) : (
+                  <HelperText className="mt-4">
+                    No required skills were extracted from the job description.
+                  </HelperText>
+                )}
+              </Panel>
+
+              <Panel>
                 <h2 className="font-title text-xl uppercase text-rv-text">Application Flow</h2>
                 <div className="mt-4 grid gap-4 md:grid-cols-3">
                   <Metric label="Assessment" value="1" />
                   <Metric
                     label="Generation"
-                    value={assessment.workflowStatus === "assessment_rejected" ? "Override" : "2"}
+                    value={assessment.workflowStatus === "assessment_rejected" ? "Blocked" : "2"}
                   />
                   <Metric label="Export Review" value="3" />
                 </div>
@@ -652,14 +693,6 @@ export function OptimizeForm() {
         ) : null}
       </section>
 
-      <ConfirmModal
-        confirmLabel="Generate Anyway"
-        description="This role was assessed as low fit. Proceeding will still create the application draft, but it may spend more tokens on a weak opportunity."
-        isOpen={isConfirmOpen}
-        onCancel={() => setIsConfirmOpen(false)}
-        onConfirm={() => void runGeneration()}
-        title="Override Low-Fit Assessment?"
-      />
     </>
   );
 }

@@ -106,3 +106,26 @@ Our COMPANY builds PRODUCTS for ENTERPRISE teams.
   assert.ok(parsed.keywords.includes("Backend"));
   assert.ok(parsed.keywords.includes("API"));
 });
+
+test("job parser captures inline and paragraph-style requirement content", () => {
+  const parsed = parseJobDescription({
+    company: "",
+    masterCv,
+    positionTitle: "",
+    salary: "",
+    jobDetails: `
+Senior Drupal Developer
+Requirements: Drupal, PHP, JavaScript, content management systems, and stakeholder collaboration.
+Preferred Qualifications: Shopify and GraphQL.
+Responsibilities: Build and maintain CMS experiences. Collaborate with stakeholders and support content platform improvements.
+`
+  });
+
+  assert.ok(parsed.position_title?.includes("Drupal Developer"));
+  assert.ok(parsed.required_skills.includes("Drupal"));
+  assert.ok(parsed.required_skills.includes("JavaScript"));
+  assert.ok(parsed.required_skills.includes("CMS"));
+  assert.ok(parsed.preferred_skills.includes("Shopify"));
+  assert.ok(parsed.preferred_skills.includes("GraphQL"));
+  assert.ok(parsed.responsibilities.length > 0);
+});
