@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import type { ReactNode } from "react";
+import { LogoutButton } from "@/components/auth/logout-button";
 import { authOptions } from "@/lib/auth";
 import { appShellStyles as styles } from "./styles";
 
@@ -32,13 +33,16 @@ export async function AppShell({ children, title, actions }: AppShellProps) {
           <Link className={styles.brand} href="/dashboard">
             RoleVector
           </Link>
-          <nav className={styles.nav}>
-            {visibleNavItems.map((item) => (
-              <Link className={styles.navLink} href={item.href} key={item.href}>
-                {item.label}
-              </Link>
-            ))}
-          </nav>
+          <div className={styles.headerActions}>
+            <nav className={styles.nav}>
+              {visibleNavItems.map((item) => (
+                <Link className={styles.navLink} href={item.href} key={item.href}>
+                  {item.label}
+                </Link>
+              ))}
+            </nav>
+            {session ? <LogoutButton /> : null}
+          </div>
         </div>
       </header>
       <section className={styles.content}>

@@ -1,13 +1,14 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Alert, Tag } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ConfirmModal } from "@/components/ui/confirm-modal";
 import { Panel } from "@/components/ui/panel";
 import { HelperText, SectionTitle } from "@/components/ui/typography";
 import type { MasterCv } from "@/lib/schemas/master-cv";
+import type { MasterCvRevisionRecord } from "@/lib/master-cv-revision";
 import type {
   OptimizedMasterCvRecord,
   OptimizedMasterCvSuggestions
@@ -51,19 +52,27 @@ function allSuggestionIds(suggestions: OptimizedMasterCvSuggestions) {
   ];
 }
 
+const progressMilestones = [12, 24, 37, 51, 64, 76, 87, 93];
+
 export function OptimizedMasterCvWorkbench({
   masterCv,
+  masterCvRevisions,
   optimizedMasterCvs,
   suggestions
 }: {
   masterCv: MasterCv | null;
+  masterCvRevisions: MasterCvRevisionRecord[];
   optimizedMasterCvs: OptimizedMasterCvRecord[];
   suggestions: OptimizedMasterCvSuggestions | null;
 }) {
   const router = useRouter();
+  const [loadedSuggestions, setLoadedSuggestions] = useState<OptimizedMasterCvSuggestions | null>(
+    suggestions
+  );
   const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<string[]>(
     suggestions ? allSuggestionIds(suggestions) : []
   );
+  const [loadingProgress, setLoadingProgress] = useState(0);
   const [status, setStatus] = useState<{
     message: string;
     tone: "success" | "warning" | "error";
@@ -72,7 +81,66 @@ export function OptimizedMasterCvWorkbench({
   const [isPromoting, setIsPromoting] = useState(false);
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
 
-  if (!masterCv || !suggestions) {
+  useEffect(() => {
+    if (!masterCv || loadedSuggestions) {
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingProgress(progressMilestones[0] ?? 10);
+
+    const progressTimer = window.setInterval(() => {
+      setLoadingProgress((current) => {
+        const nextMilestone = progressMilestones.find((value) => value > current);
+        return nextMilestone ?? current;
+      });
+    }, 800);
+
+    async function loadSuggestions() {
+      try {
+        const payload = await parseResponse<{ suggestions: OptimizedMasterCvSuggestions | null }>(
+          await fetch("/api/master-cv/optimized/suggestions", {
+            method: "GET"
+          })
+        );
+
+        if (cancelled) {
+          return;
+        }
+
+        setLoadedSuggestions(payload.suggestions);
+        setSelectedSuggestionIds(payload.suggestions ? allSuggestionIds(payload.suggestions) : []);
+        setLoadingProgress(100);
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setStatus({
+          message:
+            error instanceof Error
+              ? error.message
+              : "Unable to generate editorial suggestions right now.",
+          tone: "error"
+        });
+      } finally {
+        if (cancelled) {
+          return;
+        }
+
+        window.clearInterval(progressTimer);
+      }
+    }
+
+    void loadSuggestions();
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(progressTimer);
+    };
+  }, [loadedSuggestions, masterCv]);
+
+  if (!masterCv) {
     return (
       <Panel>
         <SectionTitle>Create A Master CV First</SectionTitle>
@@ -80,6 +148,52 @@ export function OptimizedMasterCvWorkbench({
           Save a canonical Master CV before creating optimized versions.
         </HelperText>
       </Panel>
+    );
+  }
+
+  const suggestionsToShow = loadedSuggestions;
+
+  if (!suggestionsToShow) {
+    return (
+      <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
+        <Panel>
+          <SectionTitle>Generating Editorial Updates</SectionTitle>
+          <HelperText className="mt-2">
+            Reviewing work experience and projects for clearer, more credible rewrite suggestions.
+          </HelperText>
+          <div className="mt-6">
+            <div className="h-3 overflow-hidden rounded-full bg-rv-bg/50">
+              <div
+                className="h-full rounded-full bg-rv-highlight transition-[width] duration-700 ease-out"
+                style={{ width: `${loadingProgress}%` }}
+              />
+            </div>
+            <p className="mt-3 text-sm font-bold text-rv-text">
+              Editorial updates are being generated, {loadingProgress}% complete.
+            </p>
+            <p className="mt-2 text-sm text-rv-text-muted">
+              This can take a moment when the writing pass reviews multiple experience entries.
+            </p>
+          </div>
+          {status ? (
+            <Alert className="mt-5" tone={status.tone}>
+              {status.message}
+            </Alert>
+          ) : null}
+        </Panel>
+
+        <div className="grid gap-6 xl:sticky xl:top-8 xl:self-start">
+          <Panel>
+            <SectionTitle className="text-2xl">Version Summary</SectionTitle>
+            <div className="mt-4 grid gap-3 text-sm text-rv-text-muted">
+              <p>Current curated Master CV: 1 canonical version.</p>
+              <p>Master CV revisions stored: {masterCvRevisions.length}.</p>
+              <p>Optimized versions stored: {optimizedMasterCvs.length}.</p>
+              <p>Editorial updates are loading now.</p>
+            </div>
+          </Panel>
+        </div>
+      </div>
     );
   }
 
@@ -99,7 +213,7 @@ export function OptimizedMasterCvWorkbench({
     try {
       await parseResponse<{ optimizedMasterCv: OptimizedMasterCvRecord }>(
         await fetch("/api/master-cv/optimized", {
-          body: JSON.stringify({ selectedSuggestionIds }),
+          body: JSON.stringify({ selectedSuggestionIds, suggestions: suggestionsToShow }),
           headers: { "Content-Type": "application/json" },
           method: "POST"
         })
@@ -161,91 +275,14 @@ export function OptimizedMasterCvWorkbench({
     <>
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(320px,1fr)]">
         <div className="grid gap-6">
-          <Panel>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <SectionTitle>Suggestion Review</SectionTitle>
-                <HelperText className="mt-2">
-                  Suggestions are derived from the skills already attached to experience and projects.
-                  Select the edits you want in the optimized version.
-                </HelperText>
-              </div>
-              <div className="flex flex-wrap gap-3">
-                <Button
-                  disabled={!hasSelections || isCreating}
-                  onClick={createOptimizedVersion}
-                  type="button"
-                >
-                  {isCreating ? "Saving..." : "Create optimized version"}
-                </Button>
-                <Button
-                  disabled={!latestOptimized || isPromoting}
-                  onClick={() => setIsConfirmOpen(true)}
-                  type="button"
-                  variant="highlight"
-                >
-                  {isPromoting ? "Replacing..." : "Replace master CV"}
-                </Button>
-              </div>
-            </div>
-
-            {status ? (
-              <Alert className="mt-5" tone={status.tone}>
-                {status.message}
-              </Alert>
-            ) : null}
-          </Panel>
-
           <SuggestionPanel
-            count={suggestions.skillsMissing.length}
-            title="Suggested Skills To Add"
-          >
-            {suggestions.skillsMissing.length === 0 ? (
-              <EmptySuggestionState message="No missing skills were inferred from the current experience and project content." />
-            ) : (
-              suggestions.skillsMissing.map((suggestion) => (
-                <SuggestionToggle
-                  checked={selectedSuggestionIds.includes(suggestion.id)}
-                  description={suggestion.reason}
-                  key={suggestion.id}
-                  onToggle={() => toggleSelection(suggestion.id)}
-                  title={suggestion.skill}
-                >
-                  <p className="text-xs text-rv-text-muted">
-                    Evidence: {suggestion.evidence.join(", ")}
-                  </p>
-                </SuggestionToggle>
-              ))
-            )}
-          </SuggestionPanel>
-
-          <SuggestionPanel
-            count={suggestions.skillsToRemove.length}
-            title="Suggested Skills To Remove"
-          >
-            {suggestions.skillsToRemove.length === 0 ? (
-              <EmptySuggestionState message="All listed top-level skills have supporting evidence in experience or projects." />
-            ) : (
-              suggestions.skillsToRemove.map((suggestion) => (
-                <SuggestionToggle
-                  checked={selectedSuggestionIds.includes(suggestion.id)}
-                  description={suggestion.reason}
-                  key={suggestion.id}
-                  onToggle={() => toggleSelection(suggestion.id)}
-                  title={suggestion.skill}
-                />
-              ))
-            )}
-          </SuggestionPanel>
-
-          <SuggestionPanel
-            count={suggestions.editorialUpdates.length}
+            count={suggestionsToShow.editorialUpdates.length}
             title="Editorial Updates"
           >
-            {suggestions.editorialUpdates.length === 0 ? (
+            {suggestionsToShow.editorialUpdates.length === 0 ? (
               <EmptySuggestionState message="Experience and project descriptions are already aligned with the captured facts." />
             ) : (
-              suggestions.editorialUpdates.map((suggestion) => (
+              suggestionsToShow.editorialUpdates.map((suggestion) => (
                 <SuggestionToggle
                   checked={selectedSuggestionIds.includes(suggestion.id)}
                   description={suggestion.reason}
@@ -269,21 +306,10 @@ export function OptimizedMasterCvWorkbench({
               ))
             )}
           </SuggestionPanel>
-        </div>
-
-        <div className="grid gap-6">
-          <Panel>
-            <SectionTitle className="text-2xl">Version Summary</SectionTitle>
-            <div className="mt-4 grid gap-3 text-sm text-rv-text-muted">
-              <p>Current curated Master CV: 1 canonical version.</p>
-              <p>Optimized versions stored: {optimizedMasterCvs.length}.</p>
-              <p>Selected suggestions: {selectedSuggestionIds.length}.</p>
-            </div>
-          </Panel>
 
           <Panel>
             <div className="flex items-center justify-between gap-3">
-              <SectionTitle className="text-2xl">Optimized Versions</SectionTitle>
+              <SectionTitle className="text-2xl">Optimized Revisions</SectionTitle>
               {latestOptimized ? <Tag>Main version</Tag> : null}
             </div>
             <div className="mt-4 grid gap-3">
@@ -309,13 +335,129 @@ export function OptimizedMasterCvWorkbench({
               )}
             </div>
           </Panel>
+
+          <Panel>
+            <SectionTitle className="text-2xl">Master CV Revisions</SectionTitle>
+            <div className="mt-4 grid gap-3">
+              {masterCvRevisions.length === 0 ? (
+                <HelperText>No Master CV revisions saved yet.</HelperText>
+              ) : (
+                masterCvRevisions.map((item) => (
+                  <div
+                    className="rounded-rvmd border border-rv-border bg-rv-bg/40 p-4"
+                    key={item.id}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <p className="font-bold text-rv-text">Revision {item.revisionNumber}</p>
+                      <Tag>Master snapshot</Tag>
+                    </div>
+                    <div className="mt-3 grid gap-2 text-sm text-rv-text-muted">
+                      <p>Saved: {formatDate(item.createdAt)}</p>
+                      <p>Experience entries: {item.cvJson.work_experience.length}</p>
+                      <p>Project entries: {item.cvJson.projects.length}</p>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </Panel>
+        </div>
+
+        <div className="grid gap-6 xl:sticky xl:top-8 xl:self-start">
+          <Panel>
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <SectionTitle>Suggestion Review</SectionTitle>
+                <HelperText className="mt-2">
+                  Suggestions are derived from the skills already attached to experience and projects.
+                  Select the edits you want in the optimized version.
+                </HelperText>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button
+                disabled={!hasSelections || isCreating}
+                onClick={createOptimizedVersion}
+                type="button"
+              >
+                {isCreating ? "Saving..." : "Create optimized version"}
+              </Button>
+              <Button
+                disabled={!latestOptimized || isPromoting}
+                onClick={() => setIsConfirmOpen(true)}
+                type="button"
+                variant="highlight"
+              >
+                {isPromoting ? "Replacing..." : "Replace master CV"}
+              </Button>
+            </div>
+
+            {status ? (
+              <Alert className="mt-5" tone={status.tone}>
+                {status.message}
+              </Alert>
+            ) : null}
+          </Panel>
+
+          <Panel>
+            <SectionTitle className="text-2xl">Version Summary</SectionTitle>
+            <div className="mt-4 grid gap-3 text-sm text-rv-text-muted">
+              <p>Current curated Master CV: 1 canonical version.</p>
+              <p>Master CV revisions stored: {masterCvRevisions.length}.</p>
+              <p>Optimized versions stored: {optimizedMasterCvs.length}.</p>
+              <p>Selected suggestions: {selectedSuggestionIds.length}.</p>
+            </div>
+          </Panel>
+
+          <SuggestionPanel
+            count={suggestionsToShow.skillsMissing.length}
+            title="Suggested Skills To Add"
+          >
+            {suggestionsToShow.skillsMissing.length === 0 ? (
+              <EmptySuggestionState message="No missing skills were inferred from the current experience and project content." />
+            ) : (
+              suggestionsToShow.skillsMissing.map((suggestion) => (
+                <SuggestionToggle
+                  checked={selectedSuggestionIds.includes(suggestion.id)}
+                  description={suggestion.reason}
+                  key={suggestion.id}
+                  onToggle={() => toggleSelection(suggestion.id)}
+                  title={suggestion.skill}
+                >
+                  <p className="text-xs text-rv-text-muted">
+                    Evidence: {suggestion.evidence.join(", ")}
+                  </p>
+                </SuggestionToggle>
+              ))
+            )}
+          </SuggestionPanel>
+
+          <SuggestionPanel
+            count={suggestionsToShow.skillsToRemove.length}
+            title="Suggested Skills To Remove"
+          >
+            {suggestionsToShow.skillsToRemove.length === 0 ? (
+              <EmptySuggestionState message="All listed top-level skills have supporting evidence in experience or projects." />
+            ) : (
+              suggestionsToShow.skillsToRemove.map((suggestion) => (
+                <SuggestionToggle
+                  checked={selectedSuggestionIds.includes(suggestion.id)}
+                  description={suggestion.reason}
+                  key={suggestion.id}
+                  onToggle={() => toggleSelection(suggestion.id)}
+                  title={suggestion.skill}
+                />
+              ))
+            )}
+          </SuggestionPanel>
         </div>
       </div>
 
       <ConfirmModal
         cancelLabel="Keep current master"
         confirmLabel="Replace master CV"
-        description="This replaces the current Master CV with the latest optimized version. The previous Master CV is not recoverable from this action."
+        description="This replaces the current Master CV with the latest optimized version. Before replacement, the current Master CV will be saved as a revision so it remains available for reference."
         isOpen={isConfirmOpen}
         onCancel={() => setIsConfirmOpen(false)}
         onConfirm={promoteLatestOptimized}

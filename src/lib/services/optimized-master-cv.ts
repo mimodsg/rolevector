@@ -1,4 +1,9 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import type { OptimizedMasterCV } from "@prisma/client";
+import OpenAI from "openai";
+import { zodTextFormat } from "openai/helpers/zod";
+import { z } from "zod";
 import { masterCvSchema, type MasterCv } from "../schemas/master-cv.ts";
 
 type SkillBucket =
@@ -56,12 +61,39 @@ type SkillEvidence = {
   skill: string;
 };
 
+const openai = process.env.OPENAI_API_KEY
+  ? new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY
+    })
+  : null;
+
+const aiEditorialSuggestionSchema = z.object({
+  editorial_updates: z
+    .array(
+      z.object({
+        entity_type: z.enum(["experience", "project"]),
+        index: z.number().int().min(0),
+        reason: z.string().default(""),
+        suggested_text: z.string()
+      })
+    )
+    .default([])
+});
+const AI_EDITORIAL_TIMEOUT_MS = 15000;
+
 const punctuationPattern = /[.!?]$/;
 const metricPattern = /\b\d+(?:[.,]\d+)?(?:%|x|k|m|b)?\b/i;
 const whitespacePattern = /\s+/g;
 
 function normalizeText(value: string) {
   return value.trim().replace(whitespacePattern, " ");
+}
+
+function normalizeParagraphs(value: string) {
+  return value
+    .split(/\n\s*\n/)
+    .map((paragraph) => normalizeText(paragraph))
+    .filter(Boolean);
 }
 
 function normalizeSkill(value: string) {
@@ -76,6 +108,89 @@ function ensureSentence(value: string) {
   }
 
   return punctuationPattern.test(normalized) ? normalized : `${normalized}.`;
+}
+
+function ensureParagraphText(value: string) {
+  return normalizeParagraphs(value)
+    .map((paragraph) => ensureSentence(paragraph))
+    .filter(Boolean)
+    .join("\n\n");
+}
+
+function appendParagraph(base: string, addition: string) {
+  const nextParagraph = ensureSentence(addition);
+
+  if (!nextParagraph) {
+    return ensureParagraphText(base);
+  }
+
+  const paragraphs = normalizeParagraphs(base);
+
+  return [...paragraphs.map((paragraph) => ensureSentence(paragraph)), nextParagraph].join("\n\n");
+}
+
+function isConciseDescription(value: string) {
+  const paragraphs = normalizeParagraphs(value);
+  const normalized = paragraphs.join(" ");
+
+  return paragraphs.length <= 2 && normalized.length <= 220;
+}
+
+function splitSentences(value: string) {
+  return normalizeText(value)
+    .split(/(?<=[.!?])\s+/)
+    .map((sentence) => sentence.trim())
+    .filter(Boolean);
+}
+
+function summarizeLongDescription(paragraphs: string[], technologies: string[]) {
+  const sentencePool = paragraphs.flatMap((paragraph) => splitSentences(paragraph));
+  const selected: string[] = [];
+  const maxSentences = sentencePool.length >= 3 ? 2 : 3;
+
+  for (const sentence of sentencePool) {
+    const normalizedSentence = normalizeSkill(sentence);
+
+    if (
+      selected.some(
+        (existing) =>
+          normalizeSkill(existing) === normalizedSentence ||
+          normalizeSkill(existing).includes(normalizedSentence) ||
+          normalizedSentence.includes(normalizeSkill(existing))
+      )
+    ) {
+      continue;
+    }
+
+    selected.push(ensureSentence(sentence));
+
+    if (selected.length === maxSentences) {
+      break;
+    }
+  }
+
+  const condensed = selected.join(" ");
+
+  if (!condensed) {
+    return "";
+  }
+
+  if (
+    technologies.length > 0 &&
+    !technologies.some((skill) => normalizeSkill(condensed).includes(normalizeSkill(skill)))
+  ) {
+    return `${condensed} ${ensureSentence(
+      `Core technologies included ${technologies.slice(0, 8).join(", ")}`
+    )}`;
+  }
+
+  return condensed;
+}
+
+function loadAgentPrompt(fileName: string) {
+  const filePath = path.join(process.cwd(), "agents", fileName);
+
+  return readFileSync(filePath, "utf8");
 }
 
 function uniqueValues(values: string[]) {
@@ -188,7 +303,7 @@ function editableExperienceDescription(item: MasterCv["work_experience"][number]
     ...item.cms,
     ...item.tools
   ]);
-  const base = ensureSentence(item.description);
+  const base = ensureParagraphText(item.description);
   const mentionsStack =
     technologies.length === 0 ||
     technologies.some((skill) => normalizeSkill(base).includes(normalizeSkill(skill)));
@@ -203,12 +318,16 @@ function editableExperienceDescription(item: MasterCv["work_experience"][number]
     return ensureSentence(fragments.join(" "));
   }
 
+  if (!isConciseDescription(base)) {
+    return summarizeLongDescription(normalizeParagraphs(base), technologies) || base;
+  }
+
   if (!mentionsStack && technologies.length > 0) {
-    return `${base} ${ensureSentence(`Key technologies: ${technologies.join(", ")}`)}`;
+    return appendParagraph(base, `Key technologies: ${technologies.join(", ")}`);
   }
 
   if (!metricPattern.test(base) && technologies.length > 0) {
-    return `${base} ${ensureSentence(`Technology scope included ${technologies.join(", ")}`)}`;
+    return appendParagraph(base, `Technology scope included ${technologies.join(", ")}`);
   }
 
   return base;
@@ -229,7 +348,7 @@ function editableProjectDescription(
         ...relatedExperience.tools
       ]).slice(0, 5)
     : [];
-  const base = ensureSentence(item.description);
+  const base = ensureParagraphText(item.description);
 
   if (!base) {
     const fragments = [
@@ -241,19 +360,187 @@ function editableProjectDescription(
     return ensureSentence(fragments.join(" "));
   }
 
+  if (!isConciseDescription(base)) {
+    return summarizeLongDescription(normalizeParagraphs(base), technologies) || base;
+  }
+
   if (
     technologies.length > 0 &&
     !technologies.some((skill) => normalizeSkill(base).includes(normalizeSkill(skill)))
   ) {
-    return `${base} ${ensureSentence(`Key technologies: ${technologies.join(", ")}`)}`;
+    return appendParagraph(base, `Key technologies: ${technologies.join(", ")}`);
   }
 
   return base;
 }
 
-export function generateOptimizedMasterCvSuggestions(
+function generateDeterministicEditorialSuggestions(
   masterCv: MasterCv
-): OptimizedMasterCvSuggestions {
+): EditorialSuggestion[] {
+  const editorialUpdates: EditorialSuggestion[] = [];
+
+  masterCv.work_experience.forEach((item, index) => {
+    const suggestedText = editableExperienceDescription(item);
+    const currentText = ensureParagraphText(item.description);
+
+    if (suggestedText && suggestedText !== currentText) {
+      editorialUpdates.push({
+        currentText: item.description,
+        entityLabel: `${item.title} @ ${item.company}`,
+        entityType: "experience",
+        id: `edit:experience:${index}`,
+        index,
+        reason: "Tightens the description using facts already captured in the entry.",
+        suggestedText,
+        type: "edit_experience"
+      });
+    }
+  });
+
+  masterCv.projects.forEach((item, index) => {
+    const suggestedText = editableProjectDescription(item, masterCv);
+    const currentText = ensureParagraphText(item.description);
+
+    if (suggestedText && suggestedText !== currentText) {
+      editorialUpdates.push({
+        currentText: item.description,
+        entityLabel: item.title,
+        entityType: "project",
+        id: `edit:project:${index}`,
+        index,
+        reason: "Clarifies the project description without adding unsupported claims.",
+        suggestedText,
+        type: "edit_project"
+      });
+    }
+  });
+
+  return editorialUpdates;
+}
+
+async function generateAiEditorialSuggestions(
+  masterCv: MasterCv
+): Promise<EditorialSuggestion[] | null> {
+  if (!openai) {
+    return null;
+  }
+
+  try {
+    const prompt = loadAgentPrompt("cv-editor.agent.md");
+    const response = await Promise.race([
+      openai.responses.parse({
+        input: [
+          {
+            role: "developer",
+            content: [
+              prompt,
+              "For this task, do not rewrite the full CV.",
+              "Generate editorial suggestions only for work experience and project descriptions.",
+              "Use only facts already present in the structured Master CV.",
+              "Evaluate whether the current text is too long, too bombastic, inflated, repetitive, vague, or stack-heavy.",
+              "Prefer rewrites that make the text more professional, believable, concise, and expertise-demonstrating.",
+              "Show expertise through concrete responsibilities, technical scope, architectural judgment, collaboration, and delivery context.",
+              "If a description is already strong, return no suggestion for it.",
+              "Preserve paragraph breaks and list-style readability. Do not collapse multiple paragraphs into one block.",
+              "Do not make suggestions that only tack a technology list onto the end unless that materially improves clarity and remains concise.",
+              "Prefer rewrites that improve readability, specificity, credibility, and flow of the existing content.",
+              "Return suggestions only when the wording materially improves the current text.",
+              "Return the structured response format only."
+            ].join("\n")
+          },
+          {
+            role: "user",
+            content: JSON.stringify({
+              master_cv_structured: masterCv
+            })
+          }
+        ],
+        max_output_tokens: 5000,
+        model: process.env.OPENAI_MODEL || "gpt-5",
+        text: {
+          format: zodTextFormat(aiEditorialSuggestionSchema, "editorial_suggestions")
+        }
+      }),
+      new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error("AI editorial suggestion timeout"));
+        }, AI_EDITORIAL_TIMEOUT_MS);
+      })
+    ]);
+    const parsed = response.output_parsed;
+
+    if (!parsed) {
+      return null;
+    }
+
+    return parsed.editorial_updates.flatMap<EditorialSuggestion>((item) => {
+      const suggestedText = ensureParagraphText(item.suggested_text);
+
+      if (!suggestedText) {
+        return [];
+      }
+
+      if (item.entity_type === "experience") {
+        const experience = masterCv.work_experience[item.index];
+
+        if (!experience) {
+          return [];
+        }
+
+        const currentText = ensureParagraphText(experience.description);
+
+        if (!currentText || suggestedText === currentText) {
+          return [];
+        }
+
+        return [
+          {
+            currentText: experience.description,
+            entityLabel: `${experience.title} @ ${experience.company}`,
+            entityType: "experience" as const,
+            id: `edit:experience:${item.index}`,
+            index: item.index,
+            reason:
+              item.reason || "Refines the experience description using supported CV facts.",
+            suggestedText,
+            type: "edit_experience" as const
+          }
+        ];
+      }
+
+      const project = masterCv.projects[item.index];
+
+      if (!project) {
+        return [];
+      }
+
+      const currentText = ensureParagraphText(project.description);
+
+      if (!currentText || suggestedText === currentText) {
+        return [];
+      }
+
+      return [
+        {
+          currentText: project.description,
+          entityLabel: project.title,
+          entityType: "project" as const,
+          id: `edit:project:${item.index}`,
+          index: item.index,
+          reason: item.reason || "Refines the project description using supported CV facts.",
+          suggestedText,
+          type: "edit_project" as const
+        }
+      ];
+    });
+  } catch {
+    return null;
+  }
+}
+
+export async function generateOptimizedMasterCvSuggestions(
+  masterCv: MasterCv
+): Promise<OptimizedMasterCvSuggestions> {
   const skillEvidence = collectSkillEvidence(masterCv);
   const topLevelMap = new Map<string, { bucket: SkillBucket; skill: string }>();
 
@@ -305,43 +592,9 @@ export function generateOptimizedMasterCvSuggestions(
     });
   }
 
-  const editorialUpdates: EditorialSuggestion[] = [];
-
-  masterCv.work_experience.forEach((item, index) => {
-    const suggestedText = editableExperienceDescription(item);
-    const currentText = ensureSentence(item.description);
-
-    if (suggestedText && suggestedText !== currentText) {
-      editorialUpdates.push({
-        currentText: item.description,
-        entityLabel: `${item.title} @ ${item.company}`,
-        entityType: "experience",
-        id: `edit:experience:${index}`,
-        index,
-        reason: "Tightens the description using facts already captured in the entry.",
-        suggestedText,
-        type: "edit_experience"
-      });
-    }
-  });
-
-  masterCv.projects.forEach((item, index) => {
-    const suggestedText = editableProjectDescription(item, masterCv);
-    const currentText = ensureSentence(item.description);
-
-    if (suggestedText && suggestedText !== currentText) {
-      editorialUpdates.push({
-        currentText: item.description,
-        entityLabel: item.title,
-        entityType: "project",
-        id: `edit:project:${index}`,
-        index,
-        reason: "Clarifies the project description without adding unsupported claims.",
-        suggestedText,
-        type: "edit_project"
-      });
-    }
-  });
+  const editorialUpdates =
+    (await generateAiEditorialSuggestions(masterCv)) ??
+    generateDeterministicEditorialSuggestions(masterCv);
 
   skillsMissing.sort((a, b) => a.skill.localeCompare(b.skill));
   skillsToRemove.sort((a, b) => a.skill.localeCompare(b.skill));

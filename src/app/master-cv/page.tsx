@@ -39,9 +39,17 @@ export default async function MasterCvPage() {
   return (
     <AppShell
       actions={
-        <ButtonLink href="/master-cv/optimize" variant="highlight">
-          Optimize master CV
-        </ButtonLink>
+        <div className="flex flex-wrap gap-3">
+          <ButtonLink href="/master-cv/optimize" variant="highlight">
+            Optimize master CV
+          </ButtonLink>
+          <ButtonLink href="/master-cv/revisions" variant="ghost">
+            Master CV revisions
+          </ButtonLink>
+          <ButtonLink href="/master-cv/optimized-revisions" variant="ghost">
+            Optimized CV revisions
+          </ButtonLink>
+        </div>
       }
       title="Master CV"
     >
