@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FileInput, Select, TextArea, TextInput } from "@/components/ui/field";
 import { Panel } from "@/components/ui/panel";
 import { HelperText, SectionTitle } from "@/components/ui/typography";
-import type { MasterCv } from "@/lib/schemas/master-cv";
+import { masterCvSchema, type MasterCv } from "@/lib/schemas/master-cv";
 
 type WorkExperienceItem = MasterCv["work_experience"][number];
 type ProjectItem = MasterCv["projects"][number];
@@ -113,6 +113,16 @@ function prepareForSave(masterCv: MasterCv): MasterCv {
     projects: masterCv.projects.filter((item) => item.title.trim()),
     education: masterCv.education.filter((item) => item.institution.trim())
   };
+}
+
+function exportFileName(fullName: string) {
+  const slug = fullName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
+  return `${slug || "master-cv"}-backup.json`;
 }
 
 async function parseResponse<TPayload extends object>(response: Response) {
@@ -390,6 +400,72 @@ export function MasterCvEditor({
     }
   }
 
+  async function importMasterCvJson(file: File | null) {
+    if (!file) {
+      return;
+    }
+
+    setStatus(null);
+    setIsImporting(true);
+
+    try {
+      const text = await file.text();
+      const importedMasterCv = masterCvSchema.parse(JSON.parse(text));
+
+      setMasterCv(importedMasterCv);
+      setExpandedExperienceIndexes(new Set());
+      setExpandedProjectIndexes(new Set());
+      setStatus({
+        message: `Imported ${file.name}. Review the data, then save to persist it.`,
+        tone: "success"
+      });
+    } catch (error) {
+      setStatus({
+        message:
+          error instanceof Error
+            ? error.message
+            : "Unable to import this Master CV JSON file.",
+        tone: "error"
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  }
+
+  function exportMasterCvJson() {
+    setStatus(null);
+
+    try {
+      const serializedMasterCv = JSON.stringify(prepareForSave(masterCv), null, 2);
+      const blob = new Blob([serializedMasterCv], { type: "application/json" });
+      const objectUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+
+      link.href = objectUrl;
+      link.download = exportFileName(masterCv.basics.full_name);
+      document.body.append(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+
+      setStatus({
+        message: "Master CV exported as JSON.",
+        tone: "success"
+      });
+    } catch (error) {
+      setStatus({
+        message: error instanceof Error ? error.message : "Unable to export this Master CV.",
+        tone: "error"
+      });
+    }
+  }
+
+  const jsonDebugTools = {
+    exportMasterCvJson,
+    importMasterCvJson
+  };
+  void jsonDebugTools;
+
   return (
     <Panel as="form" onSubmit={saveMasterCv}>
       <div className="sticky top-0 z-20 -mx-5 -mt-5 border-b border-rv-border bg-rv-surface/95 px-5 pb-4 pt-5 backdrop-blur">
@@ -423,23 +499,25 @@ export function MasterCvEditor({
       </div>
 
       <section className="mt-6 rounded-rvmd border border-rv-border bg-rv-bg/40 p-4">
-        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div className="flex flex-col gap-4">
           <div>
-            <h3 className="font-title text-lg uppercase text-rv-highlight">Import CV</h3>
+            <h3 className="font-title text-lg uppercase text-rv-highlight">Import Or Export</h3>
             <HelperText className="mt-1">
               Upload a text or PDF resume to prefill the form. Nothing is saved until you review and save.
             </HelperText>
           </div>
-          <Field className="w-full md:max-w-sm" label="TXT or PDF file">
-            <FileInput
-              accept=".txt,.pdf,text/plain,application/pdf"
-              disabled={isImporting}
-              onChange={(event) => {
-                void importMasterCv(event.currentTarget.files?.[0] ?? null);
-                event.currentTarget.value = "";
-              }}
-            />
-          </Field>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field className="w-full" label="TXT or PDF file">
+              <FileInput
+                accept=".txt,.pdf,text/plain,application/pdf"
+                disabled={isImporting}
+                onChange={(event) => {
+                  void importMasterCv(event.currentTarget.files?.[0] ?? null);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </Field>
+          </div>
         </div>
       </section>
 

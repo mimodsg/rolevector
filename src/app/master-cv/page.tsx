@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { ButtonLink } from "@/components/ui/button";
 import { MasterCvEditor } from "@/components/master-cv/master-cv-editor";
 import { Panel } from "@/components/ui/panel";
 import { prisma } from "@/lib/prisma";
@@ -36,7 +37,22 @@ export default async function MasterCvPage() {
   });
 
   return (
-    <AppShell title="Master CV">
+    <AppShell
+      actions={
+        <div className="flex flex-wrap gap-3">
+          <ButtonLink href="/master-cv/optimize" variant="highlight">
+            Optimize master CV
+          </ButtonLink>
+          <ButtonLink href="/master-cv/revisions" variant="ghost">
+            Master CV revisions
+          </ButtonLink>
+          <ButtonLink href="/master-cv/optimized-revisions" variant="ghost">
+            Optimized CV revisions
+          </ButtonLink>
+        </div>
+      }
+      title="Master CV"
+    >
       <section className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <Panel as="aside" className="p-4">
           <nav className="flex flex-col gap-1">

@@ -8,12 +8,10 @@
     "start": "next start",
     "lint": "eslint .",
     "test": "node --test --experimental-strip-types --experimental-specifier-resolution=node test/*.test.mjs",
+    "prisma:validate:migrations": "sh scripts/validate-prisma-migrations.sh",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "prisma:studio": "prisma studio"
-  },
-  "prisma": {
-    "seed": "node prisma/seed.mjs"
   },
   "dependencies": {
     "@prisma/client": "^6.7.0",
