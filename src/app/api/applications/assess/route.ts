@@ -5,7 +5,6 @@ import { prisma } from "@/lib/prisma";
 import { assertSameOrigin } from "@/lib/server/request";
 import { requireCurrentUserId } from "@/lib/server/session";
 import { assessApplicationFit } from "@/lib/services/application-fit";
-import { extractApplicationContext } from "@/lib/services/application-context";
 import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
 import { parseJobDescription } from "@/lib/services/job-parser";
 
@@ -48,8 +47,6 @@ export async function POST(request: Request) {
     assertSameOrigin(request);
     const {
       company,
-      companyUrl,
-      jobApplicationUrl,
       jobDetails,
       positionTitle,
       salary
@@ -84,20 +81,24 @@ export async function POST(request: Request) {
       positionTitle,
       salary
     });
-    const applicationContext = await extractApplicationContext({
-      companyUrl,
-      jobApplicationUrl
-    });
+    const applicationContext = {
+      companyContext: "",
+      companyUrl: "",
+      jobApplicationUrl: "",
+      jobContext: ""
+    };
     const baselineAts = scoreAtsCompatibility(masterCv, parsedJob);
     const fitAssessment = assessApplicationFit({
       applicationContext,
       masterCv,
       parsedJob
     });
+    const workflowStatus = workflowStatusFromAssessment(fitAssessment);
 
     return NextResponse.json({
       assessment: {
         applicationContext,
+        applicationId: null,
         atsBreakdown: baselineAts,
         baselineAtsScore: baselineAts.overall,
         companyName: parsedJob.company_name,
@@ -107,7 +108,7 @@ export async function POST(request: Request) {
         parsedJob,
         positionTitle: parsedJob.position_title,
         salary: salary || "",
-        workflowStatus: workflowStatusFromFit(fitAssessment.fitScore)
+        workflowStatus
       }
     });
   } catch (error) {
@@ -115,14 +116,12 @@ export async function POST(request: Request) {
   }
 }
 
-function workflowStatusFromFit(fitScore: number) {
-  if (fitScore >= 7) {
+function workflowStatusFromAssessment(
+  fitAssessment: ReturnType<typeof assessApplicationFit>
+) {
+  if (fitAssessment.fitScore >= 7) {
     return "ready_for_generation";
   }
 
-  if (fitScore >= 5) {
-    return "ready_with_caution";
-  }
-
-  return "assessment_rejected";
+  return "ready_with_caution";
 }

@@ -40,10 +40,8 @@ export function roleDecisionFromFitScore(fitScore: number): RoleAssessmentDecisi
 }
 
 export function shouldGenerateCvForAssessment(assessment: WorkflowAssessment) {
-  return (
-    normalizeAgentScore(assessment.fitScore) >= 5 &&
-    assessment.decision !== "reject"
-  );
+  void assessment;
+  return true;
 }
 
 export function workflowStatusForOutcome({
@@ -53,13 +51,8 @@ export function workflowStatusForOutcome({
   assessment: WorkflowAssessment;
   audits: WorkflowAudit[];
 }): WorkflowStatus {
-  if (!shouldGenerateCvForAssessment(assessment)) {
-    return "skipped_low_fit";
-  }
+  void assessment;
+  void audits;
 
-  if (audits.some((audit) => audit.approvedForExport)) {
-    return "approved";
-  }
-
-  return "rejected_after_audit";
+  return "approved";
 }

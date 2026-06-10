@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, type FormEvent, type MouseEvent } from "react";
+import { useEffect, useState, type MouseEvent } from "react";
 import {
   ApplicationDecisionFlag,
   applicationDecisionFromFit
@@ -52,6 +52,7 @@ type ApplicationContext = {
 type AssessmentResponse = {
   assessment: {
     applicationContext: ApplicationContext;
+    applicationId: string | null;
     atsBreakdown: {
       experienceAlignment: number;
       formattingCompatibility: number;
@@ -67,10 +68,7 @@ type AssessmentResponse = {
     parsedJob: ParsedJob;
     positionTitle: string | null;
     salary: string;
-    workflowStatus:
-      | "assessment_rejected"
-      | "ready_for_generation"
-      | "ready_with_caution";
+    workflowStatus: "ready_for_generation" | "ready_with_caution";
   };
 };
 
@@ -84,6 +82,8 @@ type OptimizeResponse = {
     salary: string;
   };
 };
+
+const APPLICATION_DRAFT_STORAGE_KEY = "rolevector:new-application-draft";
 
 async function parseResponse<TPayload extends object>(response: Response) {
   const text = await response.text();
@@ -132,6 +132,20 @@ function contextInsights(context: string) {
     .slice(0, 4);
 
   return stringList([...new Set([...sources, title, description, ...bodySentences])]).slice(0, 8);
+}
+
+function optionalUrl(value: string) {
+  const trimmed = value.trim();
+
+  if (!trimmed) {
+    return "";
+  }
+
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    return "";
+  }
 }
 
 function statusLabel(
@@ -185,7 +199,10 @@ export function OptimizeForm() {
   const [jobDetails, setJobDetails] = useState("");
   const [jobApplicationUrl, setJobApplicationUrl] = useState("");
   const [isAssessing, setIsAssessing] = useState(false);
+  const [isFetchingContext, setIsFetchingContext] = useState(false);
   const [isOptimizing, setIsOptimizing] = useState(false);
+  const [isContextReady, setIsContextReady] = useState(false);
+  const [isDraftLoaded, setIsDraftLoaded] = useState(false);
   const [positionTitle, setPositionTitle] = useState("");
   const [salary, setSalary] = useState("");
 
@@ -194,21 +211,87 @@ export function OptimizeForm() {
     fitScore: assessment?.fitScore ?? 0
   });
   const isLowFit = decision.decision === "Explore another opportunity";
-  const showGenerationStep = assessment?.workflowStatus !== "assessment_rejected";
+  const showGenerationStep = Boolean(assessment);
+  const showTailoringContextWidgets = showGenerationStep && isContextReady;
   const companyInsights = contextInsights(assessment?.applicationContext.companyContext ?? "");
   const jobInsights = contextInsights(assessment?.applicationContext.jobContext ?? "");
 
+  useEffect(() => {
+    const rawDraft = window.localStorage.getItem(APPLICATION_DRAFT_STORAGE_KEY);
+
+    if (!rawDraft) {
+      setIsDraftLoaded(true);
+      return;
+    }
+
+    try {
+      const draft = JSON.parse(rawDraft) as Partial<{
+        company: string;
+        companyUrl: string;
+        jobApplicationUrl: string;
+        jobDetails: string;
+        positionTitle: string;
+        salary: string;
+      }>;
+
+      setCompany(typeof draft.company === "string" ? draft.company : "");
+      setCompanyUrl(typeof draft.companyUrl === "string" ? draft.companyUrl : "");
+      setJobApplicationUrl(
+        typeof draft.jobApplicationUrl === "string" ? draft.jobApplicationUrl : ""
+      );
+      setJobDetails(typeof draft.jobDetails === "string" ? draft.jobDetails : "");
+      setPositionTitle(typeof draft.positionTitle === "string" ? draft.positionTitle : "");
+      setSalary(typeof draft.salary === "string" ? draft.salary : "");
+    } catch {
+      window.localStorage.removeItem(APPLICATION_DRAFT_STORAGE_KEY);
+    } finally {
+      setIsDraftLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isDraftLoaded) {
+      return;
+    }
+
+    window.localStorage.setItem(
+      APPLICATION_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        company,
+        companyUrl,
+        jobApplicationUrl,
+        jobDetails,
+        positionTitle,
+        salary
+      })
+    );
+  }, [
+    company,
+    companyUrl,
+    isDraftLoaded,
+    jobApplicationUrl,
+    jobDetails,
+    positionTitle,
+    salary
+  ]);
+
   function resetAssessmentState() {
+    setError(null);
     setAssessment(null);
+    setIsContextReady(false);
   }
 
   function requestPayload() {
     return {
-      company,
-      companyUrl,
-      jobApplicationUrl,
+      company: company.trim() || assessment?.companyName || "Unknown company",
+      companyUrl: optionalUrl(companyUrl),
+      jobApplicationUrl: optionalUrl(jobApplicationUrl),
       jobDetails,
-      positionTitle,
+      positionTitle:
+        positionTitle.trim() ||
+        assessment?.positionTitle ||
+        assessment?.parsedJob.position_title ||
+        "Untitled position",
       salary
     };
   }
@@ -231,6 +314,7 @@ export function OptimizeForm() {
       setPositionTitle((current) => current.trim() || payload.assessment.positionTitle || "");
       setSalary((current) => current.trim() || payload.assessment.salary || "");
       setAssessment(payload.assessment);
+      setIsContextReady(false);
     } catch (caughtError) {
       setError(
         caughtError instanceof Error
@@ -239,6 +323,49 @@ export function OptimizeForm() {
       );
     } finally {
       setIsAssessing(false);
+    }
+  }
+
+  async function getContext(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+
+    if (!assessment) {
+      setError("Assess the position before collecting context.");
+      return;
+    }
+
+    setError(null);
+    setIsFetchingContext(true);
+
+    try {
+      const payload = await parseResponse<{ applicationContext: ApplicationContext }>(
+        await fetch("/api/applications/context", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            companyUrl,
+            jobApplicationUrl
+          })
+        })
+      );
+
+      setAssessment((current) =>
+        current
+          ? {
+              ...current,
+              applicationContext: payload.applicationContext
+            }
+          : current
+      );
+      setIsContextReady(true);
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Unable to gather application context."
+      );
+    } finally {
+      setIsFetchingContext(false);
     }
   }
 
@@ -259,6 +386,7 @@ export function OptimizeForm() {
         })
       );
 
+      window.localStorage.removeItem(APPLICATION_DRAFT_STORAGE_KEY);
       router.push(`/applications/${payload.application.id}`);
       router.refresh();
     } catch (caughtError) {
@@ -272,16 +400,11 @@ export function OptimizeForm() {
     }
   }
 
-  async function optimize(event: FormEvent<HTMLElement>) {
+  async function generateApplication(event: MouseEvent<HTMLButtonElement>) {
     event.preventDefault();
 
     if (!assessment) {
       setError("Assess the position before generating the application.");
-      return;
-    }
-
-    if (isLowFit) {
-      setError("This role is below the fit threshold. Reassess a stronger opportunity instead.");
       return;
     }
 
@@ -317,10 +440,6 @@ export function OptimizeForm() {
         {
           title: "Risk Flags",
           items: stringList(assessment.fitAssessment.riskFlags)
-        },
-        {
-          title: "Tailoring Context Insights",
-          items: stringList([...companyInsights, ...jobInsights])
         }
       ]
     : [];
@@ -335,12 +454,29 @@ export function OptimizeForm() {
                 Step 1: Begin Assessment
               </h2>
               <p className="mt-2 text-sm leading-6 text-rv-text-muted">
-                Paste the job description only. The assessment extracts role signals first so you
-                can decide whether generation is worth the token cost.
+                Add the job title and paste the job description. The assessment uses both signals
+                first so you can decide whether generation is worth the token cost.
               </p>
             </div>
             <Tag>{assessment ? "Assessment Completed" : "Awaiting Assessment"}</Tag>
           </div>
+          <Field
+            className="mt-4"
+            helper="Use the exact job title when available. This improves role-family and seniority detection."
+            htmlFor="position-title-input"
+            label="Job position title"
+          >
+            <TextInput
+              id="position-title-input"
+              onChange={(event) => {
+                setPositionTitle(event.currentTarget.value);
+                resetAssessmentState();
+              }}
+              placeholder="Senior Software Engineer"
+              required
+              value={positionTitle}
+            />
+          </Field>
           <Field
             className="mt-4"
             helper="Paste the full job responsibilities, requirements, benefits, and ATS-relevant details."
@@ -383,7 +519,7 @@ export function OptimizeForm() {
         </Panel>
 
         {assessment && showGenerationStep ? (
-          <Panel as="form" className="block" onSubmit={optimize}>
+          <Panel className="block">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <h2 className="font-title text-xl uppercase text-rv-text">
@@ -403,14 +539,20 @@ export function OptimizeForm() {
             <div className="mt-4 grid items-start gap-4 md:grid-cols-2">
               <Field label="Company">
                 <TextInput
-                  onChange={(event) => setCompany(event.currentTarget.value)}
+                  onChange={(event) => {
+                    setCompany(event.currentTarget.value);
+                    setIsContextReady(false);
+                  }}
                   required
                   value={company}
                 />
               </Field>
               <Field label="Position title">
                 <TextInput
-                  onChange={(event) => setPositionTitle(event.currentTarget.value)}
+                  onChange={(event) => {
+                    setPositionTitle(event.currentTarget.value);
+                    setIsContextReady(false);
+                  }}
                   required
                   value={positionTitle}
                 />
@@ -418,7 +560,10 @@ export function OptimizeForm() {
             </div>
             <Field className="mt-4" label="Salary">
               <TextInput
-                onChange={(event) => setSalary(event.currentTarget.value)}
+                onChange={(event) => {
+                  setSalary(event.currentTarget.value);
+                  setIsContextReady(false);
+                }}
                 placeholder="Optional"
                 value={salary}
               />
@@ -429,7 +574,10 @@ export function OptimizeForm() {
                 label="Company URL"
               >
                 <TextInput
-                  onChange={(event) => setCompanyUrl(event.currentTarget.value)}
+                  onChange={(event) => {
+                    setCompanyUrl(event.currentTarget.value);
+                    setIsContextReady(false);
+                  }}
                   placeholder="https://company.com"
                   type="url"
                   value={companyUrl}
@@ -440,7 +588,10 @@ export function OptimizeForm() {
                 label="Job application URL"
               >
                 <TextInput
-                  onChange={(event) => setJobApplicationUrl(event.currentTarget.value)}
+                  onChange={(event) => {
+                    setJobApplicationUrl(event.currentTarget.value);
+                    setIsContextReady(false);
+                  }}
                   placeholder="https://company.com/careers/role"
                   type="url"
                   value={jobApplicationUrl}
@@ -461,78 +612,73 @@ export function OptimizeForm() {
             </Alert>
 
             <div className="mt-4 flex flex-wrap gap-3">
-              <Button disabled={isAssessing || isOptimizing} type="submit" variant="highlight">
+              <Button
+                disabled={isAssessing || isFetchingContext || isOptimizing}
+                onClick={getContext}
+                type="button"
+                variant={isContextReady ? "ghost" : "secondary"}
+              >
+                {isFetchingContext
+                  ? "Getting Context..."
+                  : isContextReady
+                    ? "Refresh Context"
+                    : "Get Context"}
+              </Button>
+              <Button
+                disabled={isAssessing || isFetchingContext || isOptimizing}
+                onClick={generateApplication}
+                type="button"
+                variant="highlight"
+              >
                 {isOptimizing ? "Generating..." : "Continue To Generation"}
               </Button>
             </div>
           </Panel>
         ) : null}
 
-        {assessment && !showGenerationStep ? (
-          <Panel>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="font-title text-xl uppercase text-rv-text">
-                  Step 2: Generation Blocked
-                </h2>
-                <p className="mt-2 text-sm leading-6 text-rv-text-muted">
-                  This role did not meet the minimum fit threshold. Generation stays locked on the
-                  new-application flow to avoid unnecessary token spend.
-                </p>
-              </div>
-              <div className="flex flex-wrap items-center gap-3">
-                <ApplicationDecisionFlag {...decision} />
-                <Tag>{statusLabel(assessment.workflowStatus, isLowFit)}</Tag>
-              </div>
-            </div>
-            <Alert className="mt-4" tone="warning">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="font-semibold">
-                  Fit score: {assessment.fitScore.toFixed(1)} / 10
-                </span>
-                <Tag>{assessment.fitAssessment.recommendation ?? "Low fit"}</Tag>
-              </div>
-              <p className="mt-3">
-                {assessment.fitAssessment.summary ??
-                  "The workflow recommends not proceeding with this position."}
-              </p>
-            </Alert>
-          </Panel>
-        ) : null}
-
         {assessment ? (
           <section className="grid gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)]">
             <div className="grid gap-6">
-              <div className="grid gap-6 lg:grid-cols-2">
-                <Panel>
-                  <h2 className="font-title text-xl uppercase text-rv-text">Tailoring Context</h2>
-                  <div className="mt-4 grid gap-4 text-sm">
-                    <div>
-                      <h3 className="font-bold text-rv-text-soft">Company context</h3>
-                      {companyInsights.length > 0 ? (
-                        <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
-                          {companyInsights.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="mt-2 text-rv-text-muted">No useful company context captured.</p>
-                      )}
+              <div
+                className={`grid gap-6 ${showTailoringContextWidgets ? "lg:grid-cols-2" : "lg:grid-cols-1"}`}
+              >
+                {showTailoringContextWidgets ? (
+                  <Panel>
+                    <h2 className="font-title text-xl uppercase text-rv-text">
+                      Tailoring Context
+                    </h2>
+                    <div className="mt-4 grid gap-4 text-sm">
+                      <div>
+                        <h3 className="font-bold text-rv-text-soft">Company context</h3>
+                        {companyInsights.length > 0 ? (
+                          <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                            {companyInsights.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-rv-text-muted">
+                            No useful company context captured.
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-rv-text-soft">Job context</h3>
+                        {jobInsights.length > 0 ? (
+                          <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
+                            {jobInsights.map((item) => (
+                              <li key={item}>{item}</li>
+                            ))}
+                          </ul>
+                        ) : (
+                          <p className="mt-2 text-rv-text-muted">
+                            No useful job-page context captured.
+                          </p>
+                        )}
+                      </div>
                     </div>
-                    <div>
-                      <h3 className="font-bold text-rv-text-soft">Job context</h3>
-                      {jobInsights.length > 0 ? (
-                        <ul className="mt-2 list-disc space-y-2 pl-5 leading-6 text-rv-text-muted">
-                          {jobInsights.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      ) : (
-                        <p className="mt-2 text-rv-text-muted">No useful job-page context captured.</p>
-                      )}
-                    </div>
-                  </div>
-                </Panel>
+                  </Panel>
+                ) : null}
 
                 <Panel>
                   <h2 className="font-title text-xl uppercase text-rv-text">Metadata Context</h2>
@@ -612,10 +758,7 @@ export function OptimizeForm() {
                 <h2 className="font-title text-xl uppercase text-rv-text">Application Flow</h2>
                 <div className="mt-4 grid gap-4 md:grid-cols-3">
                   <Metric label="Assessment" value="1" />
-                  <Metric
-                    label="Generation"
-                    value={assessment.workflowStatus === "assessment_rejected" ? "Blocked" : "2"}
-                  />
+                  <Metric label="Generation" value="2" />
                   <Metric label="Export Review" value="3" />
                 </div>
                 <HelperText className="mt-4">
@@ -630,6 +773,12 @@ export function OptimizeForm() {
                 </h2>
                 <div className="mt-4 grid gap-4">
                   {reportSections.map((section) => accordionSection(section))}
+                  {showTailoringContextWidgets
+                    ? accordionSection({
+                        title: "Tailoring Context Insights",
+                        items: stringList([...companyInsights, ...jobInsights])
+                      })
+                    : null}
                   {accordionSection({
                     title: "Responsibilities Extracted",
                     items: stringList(assessment.parsedJob.responsibilities)
@@ -654,7 +803,7 @@ export function OptimizeForm() {
                     ? "The role is aligned strongly enough to proceed directly to generation."
                     : assessment.workflowStatus === "ready_with_caution"
                       ? "The role is viable, but the generated application should emphasize the strongest matching evidence carefully."
-                      : "The role is currently below the recommended fit threshold. Generation remains available only as an intentional override."}
+                      : "The assessment flagged concerns, but generation remains available while the assessor is under review."}
                 </p>
               </Panel>
 

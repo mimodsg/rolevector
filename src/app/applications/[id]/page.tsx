@@ -4,19 +4,12 @@ import {
   ApplicationDecisionFlag,
   applicationDecisionFromFit
 } from "@/components/applications/application-decision-flag";
+import { DiscardApplicationButton } from "@/components/applications/discard-application-button";
 import { ApplicationStatusSelect } from "@/components/applications/application-status-select";
-import { OptimizeApplicationButton } from "@/components/applications/optimize-application-button";
-import { RegenerateApplicationButton } from "@/components/applications/regenerate-application-button";
 import { Alert, Tag } from "@/components/ui/badge";
 import { ButtonLink } from "@/components/ui/button";
-import { EmptyState } from "@/components/ui/empty-state";
 import { Panel } from "@/components/ui/panel";
 import { ScoreCard } from "@/components/ui/score-card";
-import {
-  masterCvToOptimizationText,
-  normalizeCvSectionLabels
-} from "@/lib/master-cv-text";
-import { masterCvSchema } from "@/lib/schemas/master-cv";
 import { prisma } from "@/lib/prisma";
 import { requireCurrentUserId } from "@/lib/server/session";
 
@@ -50,8 +43,10 @@ function contextInsights(context: string) {
     .filter((sentence) => sentence.length >= 40)
     .slice(0, 4);
 
-  return [...new Set([...sources, title, description, ...bodySentences].filter(Boolean))]
-    .slice(0, 6);
+  return [...new Set([...sources, title, description, ...bodySentences].filter(Boolean))].slice(
+    0,
+    6
+  );
 }
 
 function fitAssessment(value: unknown) {
@@ -99,15 +94,79 @@ function stringList(value: unknown) {
     : [];
 }
 
+function analysisSnapshot(value: unknown) {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+
+  const snapshot = value as {
+    exportApproved?: unknown;
+    fitDecision?: unknown;
+    fitRecommendation?: unknown;
+    fitScore?: unknown;
+    stage?: unknown;
+  };
+
+  const stage =
+    snapshot.stage === "assessment_rejected" ||
+    snapshot.stage === "context_collected" ||
+    snapshot.stage === "optimization_approved" ||
+    snapshot.stage === "optimization_rejected"
+      ? snapshot.stage
+      : "";
+
+  return {
+    exportApproved: snapshot.exportApproved === true,
+    fitDecision: typeof snapshot.fitDecision === "string" ? snapshot.fitDecision : "",
+    fitRecommendation:
+      typeof snapshot.fitRecommendation === "string" ? snapshot.fitRecommendation : "",
+    fitScore: typeof snapshot.fitScore === "number" ? snapshot.fitScore : 0,
+    stage
+  };
+}
+
 function workflowState({
-  fitSummary,
+  fitScore,
   isOptimized,
-  fitScore
+  snapshot
 }: {
-  fitSummary: string;
-  isOptimized: boolean;
   fitScore: number;
+  isOptimized: boolean;
+  snapshot: ReturnType<typeof analysisSnapshot>;
 }) {
+  if (snapshot?.stage === "optimization_approved" || snapshot?.exportApproved || isOptimized) {
+    return {
+      actionText: "Export Approved",
+      canExport: true,
+      description:
+        "The stored application completed assessment, context collection, CV generation, and export review successfully.",
+      stage: "auditor_approved" as const,
+      tone: "success" as const
+    };
+  }
+
+  if (snapshot?.stage === "optimization_rejected") {
+    return {
+      actionText: "Export Blocked",
+      canExport: false,
+      description:
+        "The stored optimization workflow did not approve an export-ready application package.",
+      stage: "auditor_rejected" as const,
+      tone: "warning" as const
+    };
+  }
+
+  if (snapshot?.stage === "assessment_rejected") {
+    return {
+      actionText: "Assessment Rejected",
+      canExport: false,
+      description:
+        "This application was stored directly from the assessment step because the role did not clear the fit threshold.",
+      stage: "assessor_rejected" as const,
+      tone: "warning" as const
+    };
+  }
+
   if (isOptimized) {
     return {
       actionText: "Export Approved",
@@ -119,23 +178,12 @@ function workflowState({
     };
   }
 
-  if (/CV Auditor did not approve/i.test(fitSummary)) {
-    return {
-      actionText: "Export Blocked",
-      canExport: false,
-      description:
-        "The CV Auditor rejected the tailored draft after one retry pass. Review the required fixes before retrying.",
-      stage: "auditor_rejected" as const,
-      tone: "warning" as const
-    };
-  }
-
-  if (/Role Assessor stopped optimization/i.test(fitSummary) || fitScore < 5) {
+  if (fitScore < 5) {
     return {
       actionText: "Assessment Rejected",
       canExport: false,
       description:
-        "The Role Assessor flagged this role as low fit. Proceed only if you intentionally want to spend tokens on a stretch application.",
+        "This stored application did not clear the fit threshold and remains blocked from export.",
       stage: "assessor_rejected" as const,
       tone: "warning" as const
     };
@@ -158,7 +206,11 @@ function atsCardState({
 }: {
   fitDecision: string;
   isOptimized: boolean;
-  workflowStage: "assessor_rejected" | "auditor_approved" | "auditor_rejected" | "ready_for_optimization";
+  workflowStage:
+    | "assessor_rejected"
+    | "auditor_approved"
+    | "auditor_rejected"
+    | "ready_for_optimization";
 }) {
   if (isOptimized) {
     return {
@@ -170,25 +222,28 @@ function atsCardState({
 
   if (workflowStage === "assessor_rejected") {
     return {
-      headline: "Baseline Snapshot",
-      helperText: "This is only the raw Master CV compatibility baseline, not a fit recommendation.",
-      label: "Baseline ATS Compatibility"
+      headline: "Master CV Snapshot",
+      helperText:
+        "This reflects ATS compatibility for the current Master CV only. It does not decide whether the role is worth pursuing.",
+      label: "Master CV ATS Compatibility"
     };
   }
 
   if (workflowStage === "auditor_rejected") {
     return {
-      headline: "Rejected Draft Baseline",
-      helperText: "The workflow did not approve an export-ready CV, so the baseline score is shown for reference only.",
-      label: "Baseline ATS Compatibility"
+      headline: "Rejected Draft Snapshot",
+      helperText:
+        "The workflow did not approve an export-ready CV. This score is shown for ATS reference only, not as the final application decision.",
+      label: "ATS Compatibility Reference"
     };
   }
 
   return {
     headline:
-      fitDecision === "Worth optimizing" ? "Baseline Before Workflow" : "Baseline Snapshot",
-    helperText: "Compatibility score from the current Master CV before an approved workflow run.",
-    label: "Baseline ATS Compatibility"
+      fitDecision === "Worth optimizing" ? "Pre-Workflow Snapshot" : "Master CV Snapshot",
+    helperText:
+      "Compatibility score from the current Master CV before an approved workflow run. This is separate from the role-fit decision.",
+    label: "Master CV ATS Compatibility"
   };
 }
 
@@ -207,141 +262,120 @@ export default async function ApplicationPreviewPage({
     notFound();
   }
 
-  const cv = masterCvSchema.parse(application.optimizedCvJson);
-  const optimizedCvText = normalizeCvSectionLabels(
-    application.optimizedCvText || masterCvToOptimizationText(cv)
-  );
   const scoreDelta = Number(
     (application.atsScore - application.baselineAtsScore).toFixed(1)
   );
   const isOptimized = Boolean(application.optimizedAt);
   const fit = fitAssessment(application.fitAssessment);
+  const snapshot = analysisSnapshot(application.analysisSnapshot);
   const decision = applicationDecisionFromFit({
     fitAssessment: application.fitAssessment,
     fitScore: application.fitScore
   });
   const workflow = workflowState({
-    fitSummary: fit?.summary ?? "",
     fitScore: application.fitScore,
-    isOptimized
+    isOptimized,
+    snapshot
   });
   const atsCard = atsCardState({
     fitDecision: decision.decision,
     isOptimized,
     workflowStage: workflow.stage
   });
+  const showTailoringContext = workflow.stage !== "assessor_rejected";
   const companyInsights = contextInsights(application.companyContext);
   const jobPageInsights = contextInsights(application.jobContext);
   const hasAiTailoringContext =
-    application.companyUrl ||
-    application.jobApplicationUrl ||
-    companyInsights.length > 0 ||
-    jobPageInsights.length > 0;
+    showTailoringContext &&
+    (application.companyUrl ||
+      application.jobApplicationUrl ||
+      companyInsights.length > 0 ||
+      jobPageInsights.length > 0);
+  const afterOptimizationLabel = isOptimized
+    ? application.atsScore.toFixed(1)
+    : workflow.stage === "auditor_rejected"
+      ? "Rejected by CV Auditor"
+      : workflow.stage === "assessor_rejected"
+        ? "Stopped by Role Assessor"
+        : "Not optimized yet";
 
   return (
-    <AppShell
-      actions={
-        <div className="flex flex-wrap gap-3">
-          <RegenerateApplicationButton applicationId={application.id} />
-          {isOptimized ? null : (
-            <OptimizeApplicationButton
-              applicationId={application.id}
-              confirmMessage={
-                workflow.stage === "assessor_rejected"
-                  ? "This role was assessed as low fit. Running the CV workflow anyway may spend more tokens on a weak opportunity. Continue?"
-                  : undefined
-              }
-              confirmTitle={
-                workflow.stage === "assessor_rejected"
-                  ? "Override Low-Fit Assessment?"
-                  : workflow.stage === "auditor_rejected"
-                    ? "Retry Rejected Workflow?"
-                    : "Proceed With Workflow?"
-              }
-              label={
-                workflow.stage === "assessor_rejected"
-                  ? "Override and Run CV Workflow"
-                  : workflow.stage === "auditor_rejected"
-                    ? "Retry CV Workflow"
-                    : "Run CV Workflow"
-              }
-            />
-          )}
-          {workflow.canExport ? (
-            <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="highlight">
-              Download PDFs
-            </ButtonLink>
-          ) : null}
-        </div>
-      }
-      title="Application Preview"
-    >
-      <section className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,360px)]">
-        <div className="grid min-w-0 gap-6">
-          <Panel>
-            <div className="flex flex-wrap items-start justify-between gap-4">
-              <div>
-                <h2 className="font-title text-2xl uppercase text-rv-highlight">
-                  {application.positionTitle ?? "Untitled position"}
-                </h2>
-                <p className="mt-2 text-rv-text-muted">
-                  {application.companyName ?? "Unknown company"}
-                </p>
-              </div>
-              <div className="min-w-48">
-                <ApplicationStatusSelect
-                  applicationId={application.id}
-                  initialStatus={application.status}
-                />
-              </div>
+    <AppShell title="Application Preview">
+      <section className="grid gap-6">
+        <Panel>
+          <h2 className="font-title text-xl uppercase text-rv-text">Application Details</h2>
+          <div className="mt-4">
+            <h3 className="font-title text-2xl uppercase text-rv-highlight">
+              {application.positionTitle ?? "Untitled position"}
+            </h3>
+            <p className="mt-2 text-rv-text-muted">
+              {application.companyName ?? "Unknown company"}
+            </p>
+          </div>
+          <dl className="mt-6 grid gap-4 text-sm md:grid-cols-2 xl:grid-cols-4">
+            <div>
+              <dt className="font-bold text-rv-text-soft">Application date</dt>
+              <dd className="mt-1 text-rv-text-muted">{formatDate(application.createdAt)}</dd>
             </div>
-            <dl className="mt-6 grid gap-4 text-sm md:grid-cols-4">
-              <div>
-                <dt className="font-bold text-rv-text-soft">Application date</dt>
-                <dd className="mt-1 text-rv-text-muted">{formatDate(application.createdAt)}</dd>
-              </div>
-              <div>
-                <dt className="font-bold text-rv-text-soft">Salary</dt>
-                <dd className="mt-1 text-rv-text-muted">{application.salary || "-"}</dd>
-              </div>
-              <div>
-                <dt className="font-bold text-rv-text-soft">Before score</dt>
-                <dd className="mt-1 text-rv-text-muted">
-                  {application.baselineAtsScore.toFixed(1)}
-                </dd>
-              </div>
-              <div>
-                <dt className="font-bold text-rv-text-soft">Current score</dt>
-                <dd className="mt-1 text-rv-text-muted">{application.atsScore.toFixed(1)}</dd>
-              </div>
-            </dl>
-          </Panel>
+            <div>
+              <dt className="font-bold text-rv-text-soft">Salary</dt>
+              <dd className="mt-1 text-rv-text-muted">{application.salary || "-"}</dd>
+            </div>
+            <div>
+              <dt className="font-bold text-rv-text-soft">Before score</dt>
+              <dd className="mt-1 text-rv-text-muted">
+                {application.baselineAtsScore.toFixed(1)}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-bold text-rv-text-soft">Current score</dt>
+              <dd className="mt-1 text-rv-text-muted">{application.atsScore.toFixed(1)}</dd>
+            </div>
+          </dl>
+        </Panel>
 
-          {!workflow.canExport ? (
-            <Alert tone={workflow.tone}>
-              <div className="flex flex-wrap items-center gap-3">
-                <Tag>{workflow.actionText}</Tag>
-                <span className="font-semibold">PDF export is currently disabled.</span>
-              </div>
-              <p className="mt-3">{workflow.description}</p>
-            </Alert>
-          ) : null}
+        <Panel>
+          <h2 className="font-title text-xl uppercase text-rv-text">Operations</h2>
+          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,220px)_1fr_auto] xl:items-start">
+            <div className="min-w-0">
+              <ApplicationStatusSelect
+                applicationId={application.id}
+                initialStatus={application.status}
+              />
+            </div>
+            <div className="min-w-0">
+              {workflow.canExport ? (
+                <div className="flex flex-wrap items-center gap-3 text-sm">
+                  <Tag tone="authenticated">Export Ready</Tag>
+                  <span className="text-rv-text-muted">
+                    The application package is approved and ready to download.
+                  </span>
+                </div>
+              ) : (
+                <Alert tone={workflow.tone}>
+                  <div className="flex flex-wrap items-center gap-3">
+                    <Tag>{workflow.actionText}</Tag>
+                    <span className="font-semibold">PDF export is currently disabled.</span>
+                  </div>
+                  <p className="mt-3">{workflow.description}</p>
+                </Alert>
+              )}
+            </div>
+            <div className="flex flex-wrap justify-start gap-3 xl:justify-end">
+              {workflow.canExport ? (
+                <ButtonLink href={`/api/applications/${application.id}/pdf`} variant="highlight">
+                  Download PDFs
+                </ButtonLink>
+              ) : null}
+              <DiscardApplicationButton
+                applicationId={application.id}
+                status={application.status}
+              />
+            </div>
+          </div>
+        </Panel>
 
-          <Panel>
-            <h2 className="font-title text-xl uppercase text-rv-text">Optimized CV</h2>
-            <p className="mt-4 whitespace-pre-wrap text-sm leading-6 text-rv-text-muted">
-              {optimizedCvText}
-            </p>
-          </Panel>
-
-          <Panel>
-            <p className="whitespace-pre-wrap text-sm leading-6 text-rv-text-muted">
-              {application.coverLetterText}
-            </p>
-          </Panel>
-        </div>
-
-        <aside className="grid min-w-0 max-w-full content-start gap-6 overflow-hidden">
+        <div className="grid min-w-0 gap-6 md:grid-cols-2 xl:grid-cols-3">
           <Panel className="min-w-0 overflow-hidden">
             <h2 className="font-title text-xl uppercase text-rv-text">Workflow Status</h2>
             <div className="mt-4 flex flex-wrap gap-2">
@@ -349,11 +383,7 @@ export default async function ApplicationPreviewPage({
               <Tag tone={workflow.stage === "assessor_rejected" ? "admin" : "authenticated"}>
                 {decision.decision}
               </Tag>
-              <Tag
-                tone={
-                  workflow.stage === "auditor_approved" ? "authenticated" : "neutral"
-                }
-              >
+              <Tag tone={workflow.stage === "auditor_approved" ? "authenticated" : "neutral"}>
                 {isOptimized ? "CV Auditor Approved" : "CV Auditor Pending"}
               </Tag>
             </div>
@@ -379,23 +409,49 @@ export default async function ApplicationPreviewPage({
               </div>
             </dl>
           </Panel>
+
           <Panel className="min-w-0 overflow-hidden">
-            <h2 className="font-title text-xl uppercase text-rv-text">Apply Fit</h2>
-            <div className="mt-4 rounded-rvmd border border-rv-border bg-rv-bg p-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-rv-text-muted">
-                Application decision
-              </p>
-              <div className="mt-3">
-                <ApplicationDecisionFlag {...decision} />
-              </div>
-              <p className="mt-3 break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
-                {decision.decision === "Ready to submit"
-                  ? "This role has strong alignment and no major risk flags. The application is worth submitting after your final review."
-                  : decision.decision === "Worth optimizing"
-                    ? "This role has enough alignment to justify tailoring the CV and cover letter before applying."
-                    : "This role has low alignment or meaningful risk flags. It is likely better to prioritize another opportunity."}
-              </p>
+            <h2 className="font-title text-xl uppercase text-rv-text">
+              Application Decision
+            </h2>
+            <div className="mt-4">
+              <ApplicationDecisionFlag {...decision} />
             </div>
+            <p className="mt-4 break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
+              {decision.decision === "Ready to submit"
+                ? "This role has strong alignment and no major risk flags. The application is worth submitting after your final review."
+                : decision.decision === "Worth optimizing"
+                  ? "This role has enough alignment to justify tailoring before applying."
+                  : "This role has low alignment or meaningful risk flags. It is likely better to prioritize another opportunity."}
+            </p>
+          </Panel>
+
+          <div className="min-w-0">
+            <ScoreCard
+              headline={atsCard.headline}
+              helperText={atsCard.helperText}
+              label={atsCard.label}
+              score={application.atsScore.toFixed(1)}
+              summary={
+                isOptimized
+                  ? `Optimized from ${application.baselineAtsScore.toFixed(1)} to ${application.atsScore.toFixed(1)} (${scoreDelta >= 0 ? "+" : ""}${scoreDelta}).`
+                  : workflow.stage === "assessor_rejected"
+                    ? "Baseline snapshot retained because the Role Assessor did not recommend proceeding."
+                    : workflow.stage === "auditor_rejected"
+                      ? "Baseline snapshot retained because the CV Auditor did not approve export."
+                      : "Baseline snapshot from the stored application workflow."
+              }
+            />
+          </div>
+        </div>
+
+        <div className="grid min-w-0 gap-6 md:grid-cols-2 xl:grid-cols-3">
+          <Panel className="min-w-0 overflow-hidden">
+            <h2 className="font-title text-xl uppercase text-rv-text">Application Fit</h2>
+            <p className="mt-2 text-sm leading-6 text-rv-text-muted">
+              Role Assessor score used to decide whether this application should move
+              forward in the workflow.
+            </p>
             <div className="mt-4 flex items-baseline gap-3">
               <span className="font-title text-4xl text-rv-highlight">
                 {application.fitScore ? application.fitScore.toFixed(1) : "-"}
@@ -405,10 +461,18 @@ export default async function ApplicationPreviewPage({
               </span>
             </div>
             {fit?.summary ? (
-              <p className="mt-3 break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">{fit.summary}</p>
+              <p className="mt-3 break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
+                {fit.summary}
+              </p>
             ) : null}
+          </Panel>
+
+          <Panel className="min-w-0 overflow-hidden md:col-span-2 xl:col-span-2">
+            <h2 className="font-title text-xl uppercase text-rv-text">
+              Application Fit Details
+            </h2>
             {fit ? (
-              <div className="mt-5 grid gap-4 text-sm">
+              <div className="mt-4 grid gap-6 text-sm md:grid-cols-2 xl:grid-cols-3">
                 <div>
                   <h3 className="font-bold text-rv-text-soft">Strong matches</h3>
                   {fit.strongMatches.length > 0 ? (
@@ -448,21 +512,10 @@ export default async function ApplicationPreviewPage({
               </div>
             ) : null}
           </Panel>
-          <ScoreCard
-            headline={atsCard.headline}
-            helperText={atsCard.helperText}
-            label={atsCard.label}
-            score={application.atsScore.toFixed(1)}
-            summary={
-              isOptimized
-                ? `Optimized from ${application.baselineAtsScore.toFixed(1)} to ${application.atsScore.toFixed(1)} (${scoreDelta >= 0 ? "+" : ""}${scoreDelta}).`
-                : workflow.stage === "assessor_rejected"
-                  ? "Baseline snapshot retained because the Role Assessor did not recommend proceeding."
-                  : workflow.stage === "auditor_rejected"
-                    ? "Baseline snapshot retained because the CV Auditor did not approve export."
-                    : "Baseline snapshot from your Master CV. Run the CV workflow from this preview."
-            }
-          />
+        </div>
+
+        {showTailoringContext ? (
+          <div className="grid min-w-0 gap-6 md:grid-cols-2 xl:grid-cols-3">
           <Panel className="min-w-0 overflow-hidden">
             <h2 className="font-title text-xl uppercase text-rv-text">Score Comparison</h2>
             <dl className="mt-4 space-y-4 text-sm">
@@ -474,15 +527,7 @@ export default async function ApplicationPreviewPage({
               </div>
               <div>
                 <dt className="font-bold text-rv-text-soft">After optimization</dt>
-                <dd className="mt-1 text-rv-text-muted">
-                  {isOptimized
-                    ? application.atsScore.toFixed(1)
-                    : workflow.stage === "auditor_rejected"
-                      ? "Rejected by CV Auditor"
-                      : workflow.stage === "assessor_rejected"
-                        ? "Stopped by Role Assessor"
-                        : "Not optimized yet"}
-                </dd>
+                <dd className="mt-1 text-rv-text-muted">{afterOptimizationLabel}</dd>
               </div>
               <div>
                 <dt className="font-bold text-rv-text-soft">Difference</dt>
@@ -492,7 +537,8 @@ export default async function ApplicationPreviewPage({
               </div>
             </dl>
           </Panel>
-          <Panel className="min-w-0 overflow-hidden">
+
+          <Panel className="min-w-0 overflow-hidden md:col-span-2 xl:col-span-2">
             <h2 className="font-title text-xl uppercase text-rv-text">
               AI Tailoring Context
             </h2>
@@ -540,7 +586,7 @@ export default async function ApplicationPreviewPage({
                   <h3 className="font-bold text-rv-text-soft">Job page insights</h3>
                   {jobPageInsights.length > 0 ? (
                     <ul className="mt-2 list-disc space-y-2 break-words pl-5 leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
-                  {jobPageInsights.map((insight) => (
+                      {jobPageInsights.map((insight) => (
                         <li key={insight}>{insight}</li>
                       ))}
                     </ul>
@@ -557,97 +603,85 @@ export default async function ApplicationPreviewPage({
               </p>
             )}
           </Panel>
-          <Panel className="min-w-0 overflow-hidden">
-            <h2 className="font-title text-xl uppercase text-rv-text">Job Details</h2>
-            {application.companyUrl || application.jobApplicationUrl ? (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {application.companyUrl ? (
-                  <ButtonLink
-                    className="min-h-9 px-3 py-1.5 text-xs"
-                    href={application.companyUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                    variant="ghost"
-                  >
-                    View company page
-                  </ButtonLink>
-                ) : null}
-                {application.jobApplicationUrl ? (
-                  <ButtonLink
-                    className="min-h-9 px-3 py-1.5 text-xs"
-                    href={application.jobApplicationUrl}
-                    rel="noreferrer"
-                    target="_blank"
-                    variant="ghost"
-                  >
-                    View job post
-                  </ButtonLink>
-                ) : null}
-              </div>
-            ) : null}
-            <p className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
-              {application.jobDetails}
-            </p>
-            {application.companyContext || application.jobContext ? (
-              <div className="mt-4 grid gap-4 text-sm">
-                {application.companyContext ? (
-                  <div>
-                    <h3 className="font-bold text-rv-text-soft">Company context</h3>
-                    <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
-                      {application.companyContext}
-                    </p>
-                  </div>
-                ) : null}
-                {application.jobContext ? (
-                  <div>
-                    <h3 className="font-bold text-rv-text-soft">Job page context</h3>
-                    <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
-                      {application.jobContext}
-                    </p>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </Panel>
-          {!workflow.canExport ? (
-            <EmptyState
-              action={
-                !isOptimized ? (
-                  <OptimizeApplicationButton
-                    applicationId={application.id}
-                    confirmMessage={
-                      workflow.stage === "assessor_rejected"
-                        ? "This role was assessed as low fit. Running the CV workflow anyway may spend more tokens on a weak opportunity. Continue?"
-                        : undefined
-                    }
-                    confirmTitle={
-                      workflow.stage === "assessor_rejected"
-                        ? "Override Low-Fit Assessment?"
-                        : workflow.stage === "auditor_rejected"
-                          ? "Retry Rejected Workflow?"
-                          : "Proceed With Workflow?"
-                    }
-                    label={
-                      workflow.stage === "assessor_rejected"
-                        ? "Override and Run CV Workflow"
-                        : workflow.stage === "auditor_rejected"
-                          ? "Retry CV Workflow"
-                          : "Run CV Workflow"
-                    }
-                  />
-                ) : null
-              }
-              description={
-                workflow.stage === "assessor_rejected"
-                  ? "This role was assessed as low fit. Use the override action only if you intentionally want to proceed despite that recommendation."
-                  : workflow.stage === "auditor_rejected"
-                    ? "The workflow generated a draft but did not approve it for export. Use the warnings in Apply Fit before retrying."
-                    : "Run the CV workflow to produce an export-ready application package."
-              }
-              title="Export Locked"
-            />
+          </div>
+        ) : (
+          <div className="grid min-w-0 gap-6 md:grid-cols-2 xl:grid-cols-3">
+            <Panel className="min-w-0 overflow-hidden">
+              <h2 className="font-title text-xl uppercase text-rv-text">Score Comparison</h2>
+              <dl className="mt-4 space-y-4 text-sm">
+                <div>
+                  <dt className="font-bold text-rv-text-soft">Before optimization</dt>
+                  <dd className="mt-1 text-rv-text-muted">
+                    {application.baselineAtsScore.toFixed(1)}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-rv-text-soft">After optimization</dt>
+                  <dd className="mt-1 text-rv-text-muted">{afterOptimizationLabel}</dd>
+                </div>
+                <div>
+                  <dt className="font-bold text-rv-text-soft">Difference</dt>
+                  <dd className="mt-1 text-rv-text-muted">
+                    {isOptimized ? `${scoreDelta >= 0 ? "+" : ""}${scoreDelta}` : "-"}
+                  </dd>
+                </div>
+              </dl>
+            </Panel>
+          </div>
+        )}
+
+        <Panel className="min-w-0 overflow-hidden">
+          <h2 className="font-title text-xl uppercase text-rv-text">Job Details</h2>
+          {showTailoringContext && (application.companyUrl || application.jobApplicationUrl) ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {application.companyUrl ? (
+                <ButtonLink
+                  className="min-h-9 px-3 py-1.5 text-xs"
+                  href={application.companyUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                  variant="ghost"
+                >
+                  View company page
+                </ButtonLink>
+              ) : null}
+              {application.jobApplicationUrl ? (
+                <ButtonLink
+                  className="min-h-9 px-3 py-1.5 text-xs"
+                  href={application.jobApplicationUrl}
+                  rel="noreferrer"
+                  target="_blank"
+                  variant="ghost"
+                >
+                  View job post
+                </ButtonLink>
+              ) : null}
+            </div>
           ) : null}
-        </aside>
+          <p className="mt-4 max-h-[520px] overflow-auto whitespace-pre-wrap break-words text-sm leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
+            {application.jobDetails}
+          </p>
+          {showTailoringContext && (application.companyContext || application.jobContext) ? (
+            <div className="mt-4 grid gap-4 text-sm">
+              {application.companyContext ? (
+                <div>
+                  <h3 className="font-bold text-rv-text-soft">Company context</h3>
+                  <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
+                    {application.companyContext}
+                  </p>
+                </div>
+              ) : null}
+              {application.jobContext ? (
+                <div>
+                  <h3 className="font-bold text-rv-text-soft">Job page context</h3>
+                  <p className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words leading-6 text-rv-text-muted [overflow-wrap:anywhere]">
+                    {application.jobContext}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+        </Panel>
       </section>
     </AppShell>
   );

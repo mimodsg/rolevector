@@ -23,7 +23,17 @@ export const parsedJobSchema = z.object({
   required_skills: z.array(z.string()).default([]),
   preferred_skills: z.array(z.string()).default([]),
   responsibilities: z.array(z.string()).default([]),
-  keywords: z.array(z.string()).default([])
+  keywords: z.array(z.string()).default([]),
+  constraint_clauses: z.array(z.string()).default([]),
+  alternative_requirement_groups: z
+    .array(
+      z.object({
+        items: z.array(z.string()).default([]),
+        mode: z.enum(["any_of"]).default("any_of"),
+        source_section: z.string().default("")
+      })
+    )
+    .default([])
 });
 
 export type ParsedJob = z.infer<typeof parsedJobSchema>;

@@ -189,6 +189,7 @@ export type OptimizationResult = {
 };
 
 export async function optimizeApplication({
+  assessmentOverride,
   applicationContext,
   coverLetterTemplate,
   jobDetails,
@@ -196,6 +197,7 @@ export async function optimizeApplication({
   masterCvText,
   parsedJob
 }: {
+  assessmentOverride?: RoleAssessorOutput;
   applicationContext?: Partial<ApplicationContext>;
   coverLetterTemplate?: string;
   jobDetails?: string;
@@ -206,6 +208,7 @@ export async function optimizeApplication({
   if (openai) {
     try {
       return await optimizeWithOpenAI({
+        assessmentOverride,
         applicationContext,
         coverLetterTemplate,
         jobDetails,
@@ -215,6 +218,7 @@ export async function optimizeApplication({
       });
     } catch (error) {
       return optimizeDeterministically({
+        assessmentOverride,
         applicationContext,
         coverLetterTemplate,
         fallbackReason:
@@ -228,6 +232,7 @@ export async function optimizeApplication({
   }
 
   return optimizeDeterministically({
+    assessmentOverride,
     applicationContext,
     coverLetterTemplate,
     jobDetails,
@@ -238,6 +243,7 @@ export async function optimizeApplication({
 }
 
 async function optimizeWithOpenAI({
+  assessmentOverride,
   applicationContext,
   coverLetterTemplate,
   jobDetails,
@@ -245,6 +251,7 @@ async function optimizeWithOpenAI({
   masterCvText,
   parsedJob
 }: {
+  assessmentOverride?: RoleAssessorOutput;
   applicationContext?: Partial<ApplicationContext>;
   coverLetterTemplate?: string;
   jobDetails?: string;
@@ -255,15 +262,19 @@ async function optimizeWithOpenAI({
   const contextText = applicationContextToText(applicationContext);
   const jobProfile = buildJobProfile({ contextText, jobDetails, parsedJob });
   const usage: OpenAIUsage[] = [];
-  const assessment = await assessRoleWithOpenAI({
-    applicationContext,
-    jobDetails,
-    masterCv,
-    masterCvText,
-    parsedJob
-  });
+  const assessment = assessmentOverride
+    ? { result: normalizeRoleAssessment(assessmentOverride), usage: null }
+    : await assessRoleWithOpenAI({
+        applicationContext,
+        jobDetails,
+        masterCv,
+        masterCvText,
+        parsedJob
+      });
 
-  usage.push(assessment.usage);
+  if (assessment.usage) {
+    usage.push(assessment.usage);
+  }
 
   if (!shouldGenerateCvForAssessment(assessment.result)) {
     return buildWorkflowExitResult({
@@ -273,7 +284,9 @@ async function optimizeWithOpenAI({
       masterCv,
       mode: "openai",
       notes: [
-        "Role Assessor rejected optimization before CV generation.",
+        assessmentOverride
+          ? "Pre-generation assessment rejected optimization before CV generation."
+          : "Role Assessor rejected optimization before CV generation.",
         `Assessed fit score: ${assessment.result.fitScore}/10.`,
         ...assessment.result.riskNotes
       ],
@@ -405,7 +418,7 @@ async function optimizeWithOpenAI({
       mode: "openai",
       notes: [
         "Multi-agent workflow completed with Role Assessor, CV Editor, and CV Auditor.",
-        `Role Assessor decision: ${assessment.result.decision}.`,
+        `${assessmentOverride ? "Pre-generation assessment" : "Role Assessor"} decision: ${assessment.result.decision}.`,
         `CV Editor passes: ${editorPasses}.`,
         "Cover letter was generated from the final approved CV."
       ]
@@ -602,6 +615,7 @@ async function optimizeCoverLetterWithOpenAI({
 }
 
 function optimizeDeterministically({
+  assessmentOverride,
   applicationContext,
   coverLetterTemplate,
   fallbackReason,
@@ -610,6 +624,7 @@ function optimizeDeterministically({
   masterCvText,
   parsedJob
 }: {
+  assessmentOverride?: RoleAssessorOutput;
   applicationContext?: Partial<ApplicationContext>;
   coverLetterTemplate?: string;
   fallbackReason?: string;
@@ -620,13 +635,15 @@ function optimizeDeterministically({
 }): OptimizationResult {
   const contextText = applicationContextToText(applicationContext);
   const jobProfile = buildJobProfile({ contextText, jobDetails, parsedJob });
-  const assessment = buildDeterministicRoleAssessment({
-    applicationContext,
-    jobDetails,
-    masterCv,
-    masterCvText,
-    parsedJob
-  });
+  const assessment = assessmentOverride
+    ? normalizeRoleAssessment(assessmentOverride)
+    : buildDeterministicRoleAssessment({
+        applicationContext,
+        jobDetails,
+        masterCv,
+        masterCvText,
+        parsedJob
+      });
 
   if (!shouldGenerateCvForAssessment(assessment)) {
     return buildWorkflowExitResult({
@@ -637,7 +654,9 @@ function optimizeDeterministically({
       masterCv,
       mode: "mock",
       notes: [
-        "Deterministic Role Assessor rejected optimization before CV generation.",
+        assessmentOverride
+          ? "Deterministic workflow respected the pre-generation assessment rejection."
+          : "Deterministic Role Assessor rejected optimization before CV generation.",
         `Assessed fit score: ${assessment.fitScore}/10.`,
         ...assessment.riskNotes
       ],
@@ -733,13 +752,17 @@ function optimizeDeterministically({
       mode: "mock",
       notes: [
         "Deterministic multi-agent workflow preserved the existing optimization fallback.",
-        `Role Assessor decision: ${assessment.decision}.`,
+        `${assessmentOverride ? "Pre-generation assessment" : "Role Assessor"} decision: ${assessment.decision}.`,
         `CV Editor passes: ${editorPasses}.`
       ],
       outputTokens: 0,
       totalTokens: 0
     }
   };
+}
+
+export function buildRoleAssessmentOverride(input: RoleAssessorInput): RoleAssessorOutput {
+  return buildDeterministicRoleAssessment(input);
 }
 
 function buildDeterministicRoleAssessment({

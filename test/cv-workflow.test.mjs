@@ -13,7 +13,7 @@ test("role assessor thresholds map fit scores to the expected decisions", () => 
   assert.equal(roleDecisionFromFitScore(4), "reject");
 });
 
-test("workflow generates CVs only for optimize and optimize_with_caution outcomes", () => {
+test("workflow always proceeds to CV generation once the user chooses to continue", () => {
   assert.equal(
     shouldGenerateCvForAssessment({ decision: "optimize", fitScore: 7 }),
     true
@@ -27,17 +27,17 @@ test("workflow generates CVs only for optimize and optimize_with_caution outcome
   );
   assert.equal(
     shouldGenerateCvForAssessment({ decision: "reject", fitScore: 4 }),
-    false
+    true
   );
 });
 
-test("workflow status branches correctly across skip, approve, and audit rejection", () => {
+test("workflow status stays approved because assessor and auditor are advisory", () => {
   assert.equal(
     workflowStatusForOutcome({
       assessment: { decision: "reject", fitScore: 3 },
-      audits: []
+      audits: [{ approvedForExport: false }]
     }),
-    "skipped_low_fit"
+    "approved"
   );
   assert.equal(
     workflowStatusForOutcome({
@@ -51,7 +51,7 @@ test("workflow status branches correctly across skip, approve, and audit rejecti
       assessment: { decision: "optimize_with_caution", fitScore: 5 },
       audits: [{ approvedForExport: false }, { approvedForExport: false }]
     }),
-    "rejected_after_audit"
+    "approved"
   );
 });
 

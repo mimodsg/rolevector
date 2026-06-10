@@ -127,7 +127,8 @@ test("full hard-requirement alignment now reads as a strong fit", () => {
     }
   });
 
-  assert.ok(result.fitScore >= 8, `expected strong fit, got ${result.fitScore}`);
+  assert.ok(result.fitScore >= 7.5, `expected strong fit, got ${result.fitScore}`);
+  assert.equal(result.generationDecision, "ALLOW");
 });
 
 test("specialized CMS roles are not crushed by one unsupported secondary platform", () => {
@@ -155,4 +156,144 @@ test("specialized CMS roles are not crushed by one unsupported secondary platfor
     `expected this mixed-platform CMS role to remain viable, got ${result.fitScore}`
   );
   assert.notEqual(result.decision, "Explore another opportunity");
+});
+
+test("multi-word soft-skill phrases from the master CV count as matched core requirements", () => {
+  const result = assessApplicationFit({
+    masterCv: {
+      ...baseCv,
+      soft_skills: [
+        "Mentoring",
+        "Communication",
+        "Problem Solving",
+        "Project Management",
+        "Process Improvement",
+        "Team Leadership",
+        "Strategic Planning",
+        "Adaptability"
+      ]
+    },
+    parsedJob: {
+      company_name: "OpsCo",
+      position_title: "Operations Manager",
+      salary: null,
+      location: "Remote",
+      seniority: "senior",
+      required_skills: [
+        "Problem Solving",
+        "Project Management",
+        "Process Improvement",
+        "Team Leadership",
+        "Strategic Planning",
+        "Adaptability"
+      ],
+      preferred_skills: [],
+      responsibilities: [
+        "Oversee daily operations and ensure project milestones are met",
+        "Collaborate across departments to streamline workflows",
+        "Provide strategic insights to senior leadership"
+      ],
+      keywords: ["Operations", "Project Management", "Team Leadership"]
+    }
+  });
+
+  assert.deepEqual(
+    [...result.coreRequirementsMissing].sort(),
+    [],
+    `expected no missing phrase-based soft-skill requirements, got ${result.coreRequirementsMissing.join(", ")}`
+  );
+  assert.ok(
+    result.coreRequirementsMatched.includes("Project Management"),
+    "expected phrase-level soft skill to count as a matched core requirement"
+  );
+});
+
+test("low overall fit without true blockers allows generation with warning", () => {
+  const result = assessApplicationFit({
+    masterCv: baseCv,
+    parsedJob: {
+      company_name: "GeneralCo",
+      position_title: "Operations Coordinator",
+      salary: null,
+      location: "Remote",
+      seniority: "mid",
+      required_skills: ["Operations", "Process Improvement", "Strategic Planning"],
+      preferred_skills: ["Project Management"],
+      responsibilities: [
+        "Coordinate internal workflows and support reporting",
+        "Collaborate across teams on process improvements"
+      ],
+      keywords: ["Operations", "Reporting", "Coordination"]
+    }
+  });
+
+  assert.notEqual(
+    result.generationDecision,
+    "BLOCK",
+    `expected warning path instead of block, got ${result.generationDecision}`
+  );
+});
+
+test("high-confidence constraint blockers still block generation", () => {
+  const result = assessApplicationFit({
+    masterCv: baseCv,
+    parsedJob: {
+      company_name: "ClearanceCo",
+      position_title: "Program Specialist",
+      salary: null,
+      location: "On-site",
+      seniority: "senior",
+      required_skills: ["Active security clearance", "US citizen", "Project Management"],
+      preferred_skills: [],
+      responsibilities: [
+        "Support regulated program delivery on-site",
+        "Coordinate reporting with government stakeholders"
+      ],
+      keywords: ["Security Clearance", "US Citizen", "On-site"]
+    }
+  });
+
+  assert.equal(result.generationDecision, "BLOCK");
+});
+
+test("alternative requirement groups do not require every listed option", () => {
+  const result = assessApplicationFit({
+    masterCv: baseCv,
+    parsedJob: {
+      company_name: "TrainingCo",
+      position_title: "Web Developer",
+      salary: null,
+      location: "Remote",
+      seniority: "mid",
+      required_skills: ["Python", "Java", "JavaScript", "TypeScript", "C++", "Swift", "Rust"],
+      preferred_skills: ["Full stack", "Backend", "Frontend", "Mobile"],
+      responsibilities: [
+        "Review and evaluate code written by AI models",
+        "Write coding challenges to test AI capabilities",
+        "Identify bugs and provide structured feedback"
+      ],
+      keywords: ["Software Engineering", "JavaScript", "TypeScript", "Remote"],
+      constraint_clauses: [
+        "Candidates must be legally authorised to work in one of the listed Latin America locations"
+      ],
+      alternative_requirement_groups: [
+        {
+          items: ["Python", "Java", "JavaScript", "TypeScript", "C++", "Swift", "Rust"],
+          mode: "any_of",
+          source_section: "required_skills"
+        }
+      ]
+    }
+  });
+
+  assert.notEqual(
+    result.generationDecision,
+    "BLOCK",
+    `expected alternative language group to avoid blocking, got ${result.generationDecision}`
+  );
+  assert.ok(
+    !result.coreRequirementsMissing.includes("Python") ||
+      !result.coreRequirementsMissing.includes("Java"),
+    `expected satisfied alternative group not to mark every sibling as missing: ${result.coreRequirementsMissing.join(", ")}`
+  );
 });

@@ -18,7 +18,13 @@ const atsPhrasePatterns = [
   /\bunit testing\b/gi
 ] as const;
 
-type SectionKind = "required" | "preferred" | "responsibility" | "other";
+type SectionKind =
+  | "required"
+  | "preferred"
+  | "responsibility"
+  | "constraint"
+  | "ignored"
+  | "other";
 
 type SkillDictionary = {
   canonicalByNormalized: Map<string, string>;
@@ -53,20 +59,31 @@ export function parseJobDescription({
     .filter((item) => item.kind === "responsibility")
     .map((item) => item.text)
     .slice(0, 12);
+  const constraintLines = classifiedLines
+    .filter((item) => item.kind === "constraint")
+    .map((item) => item.text)
+    .slice(0, 8);
   const resolvedPositionTitle = resolvePositionTitle(lines, positionTitle);
   const resolvedCompany = resolveCompany(lines, company);
   const normalizedDetails = normalize(jobDetails);
   const skillDictionary = buildSkillDictionary(masterCv);
   const location = extractLocation(lines);
   const seniority = extractSeniority([resolvedPositionTitle, jobDetails].join("\n"));
+  const alternativeRequirementGroups = extractAlternativeRequirementGroups(
+    requiredLines,
+    skillDictionary
+  );
   const requiredSkills = unique([
     ...extractSkillsFromText(resolvedPositionTitle, skillDictionary),
     ...extractSkillsFromLines(requiredLines, skillDictionary),
-    ...extractRequiredSkillHints(requiredLines, skillDictionary)
+    ...extractRequiredSkillHints(requiredLines, skillDictionary),
+    ...extractContextualSkillHints(requiredLines, skillDictionary),
+    ...alternativeRequirementGroups.flatMap((group) => group.items)
   ]).slice(0, 14);
   const preferredSkills = unique([
     ...extractSkillsFromLines(preferredLines, skillDictionary),
-    ...extractPreferredSkillHints(preferredLines, skillDictionary)
+    ...extractPreferredSkillHints(preferredLines, skillDictionary),
+    ...extractContextualSkillHints(preferredLines, skillDictionary)
   ])
     .filter((skill) => !requiredSkills.some((required) => sameSkill(required, skill)))
     .slice(0, 12);
@@ -93,7 +110,9 @@ export function parseJobDescription({
     required_skills: requiredSkills,
     preferred_skills: preferredSkills,
     responsibilities: responsibilityLines,
-    keywords
+    keywords,
+    constraint_clauses: constraintLines,
+    alternative_requirement_groups: alternativeRequirementGroups
   });
 }
 
@@ -232,7 +251,7 @@ function classifyLines(lines: string[]) {
 
 function sectionHeading(line: string): { kind: SectionKind; remainder: string } | null {
   const requiredHeading = line.match(
-    /^(requirements|required qualifications|must have|what you bring|what we're looking for)[:\s-]*(.*)$/i
+    /^(requirements|required qualifications|minimum qualifications|qualifications|desired skills(?: and experience)?|skills(?: and experience)?|must have|what you bring|what we're looking for)[:\s-]*(.*)$/i
   );
 
   if (requiredHeading) {
@@ -243,7 +262,7 @@ function sectionHeading(line: string): { kind: SectionKind; remainder: string } 
   }
 
   const preferredHeading = line.match(
-    /^(preferred qualifications|nice to have|bonus points|preferred|pluses)[:\s-]*(.*)$/i
+    /^(preferred qualifications|nice to have|bonus points|preferred|pluses|nice to haves?)[:\s-]*(.*)$/i
   );
 
   if (preferredHeading) {
@@ -264,6 +283,24 @@ function sectionHeading(line: string): { kind: SectionKind; remainder: string } 
     };
   }
 
+  const constraintHeading = line.match(
+    /^(eligibility requirements|eligibility|work arrangement|availability|legal authorization|location requirements?)[:\s-]*(.*)$/i
+  );
+
+  if (constraintHeading) {
+    return {
+      kind: "constraint",
+      remainder: cleanBullet(constraintHeading[1] ? constraintHeading[2] ?? "" : "")
+    };
+  }
+
+  if (ignoredSectionHeading(line)) {
+    return {
+      kind: "ignored",
+      remainder: ""
+    };
+  }
+
   return null;
 }
 
@@ -272,7 +309,11 @@ function inferLineKind(line: string, currentSection: SectionKind): SectionKind {
     return currentSection;
   }
 
-  if (/(must have|required|requirement|minimum qualification|experience with)/i.test(line)) {
+  if (
+    /(must have|required|requirement|minimum qualification|experience with|proficiency in|proficient in|familiarity with|knowledge of|expertise in|background in|working on|working with)/i.test(
+      line
+    )
+  ) {
     return "required";
   }
 
@@ -281,7 +322,15 @@ function inferLineKind(line: string, currentSection: SectionKind): SectionKind {
   }
 
   if (
-    /(responsible for|you will|build|develop|lead|design|maintain|support|collaborate|mentor|own)/i.test(
+    /\b(authori[sz]ed to work|work authorization|eligibility|visa|citizen|citizenship|resident|clearance|location|remote|hybrid|on-site|onsite|availability)\b/i.test(
+      line
+    )
+  ) {
+    return "constraint";
+  }
+
+  if (
+    /\b(responsible for|you will|build|develop|lead|design|maintain|support|collaborate|mentor|own)\b/i.test(
       line
     )
   ) {
@@ -293,6 +342,10 @@ function inferLineKind(line: string, currentSection: SectionKind): SectionKind {
 
 function shouldCaptureLine(line: string, currentSection: SectionKind) {
   if (!line.trim()) {
+    return false;
+  }
+
+  if (currentSection === "ignored") {
     return false;
   }
 
@@ -352,6 +405,16 @@ function extractPreferredSkillHints(lines: string[], skillDictionary: SkillDicti
   );
 }
 
+function extractContextualSkillHints(lines: string[], skillDictionary: SkillDictionary) {
+  return unique(
+    lines.flatMap((line) =>
+      extractContextualPhrases(line)
+        .map((phrase) => canonicalizeOrFormatSkill(phrase, skillDictionary))
+        .filter((phrase) => likelySkillPhrase(phrase))
+    )
+  );
+}
+
 function canonicalizeOrFormatSkill(value: string, skillDictionary: SkillDictionary) {
   const cleaned = cleanPhrase(value);
   const normalized = normalize(cleaned);
@@ -373,7 +436,9 @@ function canonicalizeOrFormatSkill(value: string, skillDictionary: SkillDictiona
   }
 
   const contained = skillDictionary.normalizedSkills.find(
-    (skill) => skill === normalized || normalized.includes(skill) || skill.includes(normalized)
+    (skill) =>
+      skill === normalized ||
+      (normalized.length >= 3 && (normalized.includes(skill) || skill.includes(normalized)))
   );
 
   if (contained) {
@@ -453,6 +518,83 @@ function extractCommaSeparatedPhrases(line: string) {
     .slice(0, 8);
 }
 
+function extractContextualPhrases(line: string) {
+  const cleanedLine = cleanBullet(line);
+  const matches = [
+    ...cleanedLine.matchAll(
+      /\b(?:experience(?:\s+working)?\s+(?:with|on)|proficiency in|proficient in|familiarity with|knowledge of|expertise in|background in|working on|working with|using|such as)\s+([^.;:]+)/gi
+    )
+  ];
+
+  return unique(
+    matches.flatMap((match) =>
+      (match[1] ?? "")
+        .split(/,|;|\/|\bor\b|\band\b/gi)
+        .map((part) =>
+          cleanPhrase(
+            part
+              .replace(/^\s*(?:along with\s+)?experience(?:\s+working)?\s+(?:with|on)\s+/i, "")
+              .replace(/^\s*(?:along with\s+)?familiarity with\s+/i, "")
+              .replace(/^\s*(?:along with\s+)?knowledge of\s+/i, "")
+              .replace(/^\s*(?:along with\s+)?proficiency in\s+/i, "")
+              .replace(/^\s*(?:along with\s+)?proficient in\s+/i, "")
+              .replace(/^\s*(?:along with\s+)?background in\s+/i, "")
+              .replace(/^\s*(?:along with\s+)?expertise in\s+/i, "")
+              .replace(
+                /^(?:multiple programming languages|programming languages|frameworks|platforms|systems|tools|technologies|methodologies)\s+such as\s+/i,
+                ""
+              )
+              .replace(
+                /^(?:multiple programming languages|programming languages|frameworks|platforms|systems|tools|technologies|methodologies)\s+/i,
+                ""
+              )
+              .replace(/\bis essential\b.*$/i, "")
+              .replace(/\bis expected\b.*$/i, "")
+              .replace(/\bis required\b.*$/i, "")
+              .replace(/\bsimilar\b.*$/i, "")
+              .replace(/\b(?:or similar|preferred|required|expected|essential)\b.*$/i, "")
+          )
+        )
+        .filter(Boolean)
+    )
+  ).slice(0, 10);
+}
+
+function extractAlternativeRequirementGroups(
+  lines: string[],
+  skillDictionary: SkillDictionary
+) {
+  const groups = [];
+
+  for (const line of lines) {
+    const match = line.match(
+      /\b(?:one or more of the following|one or more of|one of the following|any of the following)\s*:?\s*(.+)$/i
+    );
+
+    if (!match?.[1]) {
+      continue;
+    }
+
+    const items = unique(
+      extractCommaSeparatedPhrases(match[1])
+        .map((phrase) => canonicalizeOrFormatSkill(phrase, skillDictionary))
+        .filter((phrase) => likelySkillPhrase(phrase))
+    );
+
+    if (items.length < 2) {
+      continue;
+    }
+
+    groups.push({
+      items,
+      mode: "any_of" as const,
+      source_section: "required_skills"
+    });
+  }
+
+  return groups;
+}
+
 function likelySkillPhrase(value: string) {
   const normalizedValue = normalize(value);
   const wordCount = value.trim().split(/\s+/).filter(Boolean).length;
@@ -466,7 +608,7 @@ function likelySkillPhrase(value: string) {
   }
 
   if (
-    /\byears?\b|\bexperience\b|\bbuilding\b|\bplatforms?\b|\bapplications?\b|\bteams?\b|\bstakeholders?\b/.test(
+    /\byears?\b|\bexperience\b|\bbuilding\b|\bplatforms?\b|\bapplications?\b/.test(
       normalizedValue
     )
   ) {
@@ -489,7 +631,7 @@ function likelySkillPhrase(value: string) {
     return true;
   }
 
-  return /^[a-z][a-z0-9-]{2,}$/.test(value);
+  return /^[a-z][a-z0-9+#./-]{2,}(?:\s+[a-z][a-z0-9+#./-]{2,}){0,2}$/.test(value);
 }
 
 function isCandidateContentLine(line: string) {
@@ -498,6 +640,12 @@ function isCandidateContentLine(line: string) {
     /\b(required|preferred|experience|design|build|develop|lead|maintain|support|collaborate|mentor|own|proficient|qualifications|responsibilities|skills|knowledge|familiarity|expertise)\b/i.test(
       line
     )
+  );
+}
+
+function ignoredSectionHeading(line: string) {
+  return /^(about (?:the )?(?:company|role)|company overview|benefits|compensation|equal opportunity|eeo|about us|why join us|who we are|our culture|what we offer)[:\s-]*$/i.test(
+    line
   );
 }
 

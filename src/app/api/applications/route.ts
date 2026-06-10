@@ -13,6 +13,10 @@ import { assessApplicationFit } from "@/lib/services/application-fit";
 import { extractApplicationContext } from "@/lib/services/application-context";
 import { scoreAtsCompatibility } from "@/lib/services/ats-scoring";
 import { generateCoverLetter } from "@/lib/services/cover-letter-generator";
+import {
+  buildRoleAssessmentOverride,
+  optimizeApplication
+} from "@/lib/services/ai-optimizer";
 import { parseJobDescription } from "@/lib/services/job-parser";
 
 function apiError(error: unknown) {
@@ -86,18 +90,24 @@ export async function POST(request: Request) {
       positionTitle,
       salary
     });
+    const fitAssessment = assessApplicationFit({
+      masterCv,
+      parsedJob
+    });
+
     const applicationContext = await extractApplicationContext({
       companyUrl,
       jobApplicationUrl
     });
     const baselineScore = scoreAtsCompatibility(masterCv, parsedJob).overall;
-    const fitAssessment = assessApplicationFit({
-      applicationContext,
-      masterCv,
-      parsedJob
-    });
     const coverLetterTemplate = await prisma.coverLetterTemplate.findUnique({
       where: { userId }
+    });
+    const draftCoverLetter = generateCoverLetter({
+      masterCv,
+      parsedJob,
+      applicationContext,
+      template: coverLetterTemplate?.content
     });
     const application = await prisma.application.create({
       data: {
@@ -114,20 +124,74 @@ export async function POST(request: Request) {
         parsedMetadata: parsedJob,
         optimizedCvJson: masterCv,
         optimizedCvText: normalizeCvSectionLabels(masterCvText),
-        coverLetterText: generateCoverLetter({
-          masterCv,
-          parsedJob,
-          applicationContext,
-          template: coverLetterTemplate?.content
-        }),
+        coverLetterText: draftCoverLetter,
         baselineAtsScore: baselineScore,
         atsScore: baselineScore,
         fitAssessment,
-        fitScore: fitAssessment.fitScore
+        fitScore: fitAssessment.fitScore,
+        analysisSnapshot: {
+          contextCollected: true,
+          exportApproved: false,
+          fitDecision: fitAssessment.decision,
+          fitRecommendation: fitAssessment.recommendation,
+          fitScore: fitAssessment.fitScore,
+          stage: "context_collected"
+        }
+      }
+    });
+    const assessmentOverride = buildRoleAssessmentOverride({
+      jobDetails,
+      masterCv,
+      masterCvText,
+      parsedJob
+    });
+    const optimized = await optimizeApplication({
+      assessmentOverride,
+      applicationContext,
+      coverLetterTemplate: coverLetterTemplate?.content,
+      jobDetails,
+      masterCv,
+      masterCvText,
+      parsedJob
+    });
+    const persistedCv = optimized.exportReady ? optimized.optimizedCvJson : masterCv;
+    const optimizedCvText = normalizeCvSectionLabels(masterCvToOptimizationText(persistedCv));
+    const updatedApplication = await prisma.application.update({
+      where: { id: application.id },
+      data: {
+        atsScore: optimized.exportReady ? optimized.atsScore : baselineScore,
+        baselineAtsScore: baselineScore,
+        coverLetterText: optimized.exportReady ? optimized.coverLetterText : draftCoverLetter,
+        fitAssessment,
+        fitScore: fitAssessment.fitScore,
+        optimizedAt: optimized.exportReady ? new Date() : null,
+        optimizedCvJson: persistedCv,
+        optimizedCvText,
+        analysisSnapshot: {
+          assessorDecision: assessmentOverride.decision,
+          assessorFitScore: assessmentOverride.fitScore,
+          contextCollected: true,
+          exportApproved: optimized.exportReady,
+          fitDecision: fitAssessment.decision,
+          fitRecommendation: fitAssessment.recommendation,
+          fitScore: fitAssessment.fitScore,
+          stage: optimized.exportReady ? "optimization_approved" : "optimization_rejected",
+          workflowStatus: optimized.workflow.status
+        }
+      }
+    });
+    await prisma.aIUsage.create({
+      data: {
+        applicationId: application.id,
+        estimatedCost: 0,
+        inputTokens: optimized.metadata.inputTokens,
+        model: optimized.metadata.model,
+        outputTokens: optimized.metadata.outputTokens,
+        userId
       }
     });
 
-    return NextResponse.json({ application });
+    return NextResponse.json({ application: updatedApplication, metadata: optimized.metadata });
   } catch (error) {
     return apiError(error);
   }
